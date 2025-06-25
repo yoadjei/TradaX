@@ -1,0 +1,16 @@
+{
+  "name": "@tradax/trading",
+  "version": "1.0.0",
+  "description": "Trading module for TradaX",
+  "main": "src/index.js",
+  "dependencies": {
+    "@tradax/ui": "*",
+    "@tradax/theme": "*",
+    "@tradax/utils": "*",
+    "react": "18.2.0",
+    "react-native": "0.72.0",
+    "react-native-svg": "13.9.0",
+    "victory-native": "^36.6.0"
+  },
+  "private": true
+}

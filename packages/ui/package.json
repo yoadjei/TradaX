@@ -1,0 +1,12 @@
+{
+  "name": "@tradax/ui",
+  "version": "1.0.0",
+  "description": "UI component library for TradaX",
+  "main": "src/index.js",
+  "dependencies": {
+    "@tradax/theme": "*",
+    "react": "18.2.0",
+    "react-native": "0.72.0"
+  },
+  "private": true
+}
