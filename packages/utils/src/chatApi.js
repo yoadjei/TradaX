@@ -1,0 +1,36 @@
+import axios from 'axios';
+
+const RAPIDAPI_KEY = 'd6a0a5d78emsh56e2e956a52b8b3p1fbd32jsn94aab31c9a50';
+const RAPIDAPI_HOST = 'chatgpt-42.p.rapidapi.com';
+
+export const chatApi = {
+  async sendMessage(userMessage) {
+    try {
+      const response = await axios.post(
+        'https://chatgpt-42.p.rapidapi.com/chat',
+        {
+          messages: [{ role: 'user', content: userMessage }],
+          model: 'gpt-4o-mini',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RapidAPI-Key': RAPIDAPI_KEY,
+            'X-RapidAPI-Host': RAPIDAPI_HOST,
+          },
+        }
+      );
+
+      console.log('RapidAPI Response:', response.data);
+
+      if (response.data?.choices?.[0]?.message?.content) {
+        return response.data.choices[0].message.content.trim();
+      } else {
+        throw new Error('No AI response.');
+      }
+    } catch (error) {
+      console.error('RapidAPI Chat Error:', error);
+      throw error;
+    }
+  },
+};

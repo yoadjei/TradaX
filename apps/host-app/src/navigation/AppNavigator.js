@@ -1,20 +1,15 @@
-import React, { lazy, useState, useEffect } from 'react';
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-
 import { useTheme } from '@tradax/theme';
-import { getToken } from '@tradax/utils';
-import Loading from '../components/Loading';
 
-// Lazy load feature modules
-const AuthNavigator = lazy(() => import('@tradax/auth/AuthNavigator'));
-const HomeNavigator = lazy(() => import('@tradax/home/HomeNavigator'));
-const WalletNavigator = lazy(() => import('@tradax/wallet/WalletNavigator'));
-const TradingNavigator = lazy(() => import('@tradax/trading/TradingNavigator'));
-const NewsNavigator = lazy(() => import('@tradax/news/NewsNavigator'));
-const AIChatNavigator = lazy(() => import('@tradax/ai-chat/AIChatNavigator'));
-const SettingsNavigator = lazy(() => import('@tradax/settings/SettingsNavigator'));
+import MarketOverviewScreen from '../../../home/src/screens/MarketOverviewScreen';
+import WalletScreen from '../../../wallet/src/screens/WalletScreen';
+import TradingScreen from '../../../trading/src/screens/TradingScreen';
+import NewsListScreen from '../../../news/src/screens/NewsListScreen';
+import ChatScreen from '../../../aiChat/src/screens/ChatScreen';
+import SettingsScreen from '../../../settings/src/screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -48,7 +43,7 @@ function MainTabNavigator() {
               iconName = focused ? 'settings' : 'settings-outline';
               break;
             default:
-              iconName = 'circle';
+              iconName = 'ellipse-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -68,43 +63,22 @@ function MainTabNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeNavigator} />
-      <Tab.Screen name="Wallet" component={WalletNavigator} />
-      <Tab.Screen name="Trading" component={TradingNavigator} />
-      <Tab.Screen name="News" component={NewsNavigator} />
-      <Tab.Screen name="AI Chat" component={AIChatNavigator} />
-      <Tab.Screen name="Settings" component={SettingsNavigator} />
+      <Tab.Screen name="Home" component={MarketOverviewScreen} />
+      <Tab.Screen name="Wallet" component={WalletScreen} />
+      <Tab.Screen name="Trading" component={TradingScreen} />
+      <Tab.Screen name="News" component={NewsListScreen} />
+      <Tab.Screen name="AI Chat" component={ChatScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
 
 export default function AppNavigator() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const { theme } = useTheme();
-
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      const token = await getToken();
-      setIsAuthenticated(!!token);
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading) {
-    return <Loading />;
-  }
 
   return (
     <Stack.Navigator
+      initialRouteName="Main"
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.background,
@@ -115,19 +89,11 @@ export default function AppNavigator() {
         },
       }}
     >
-      {isAuthenticated ? (
-        <Stack.Screen 
-          name="Main" 
-          component={MainTabNavigator} 
-          options={{ headerShown: false }}
-        />
-      ) : (
-        <Stack.Screen 
-          name="Auth" 
-          component={AuthNavigator} 
-          options={{ headerShown: false }}
-        />
-      )}
+      <Stack.Screen
+        name="Main"
+        component={MainTabNavigator}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

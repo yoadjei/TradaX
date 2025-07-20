@@ -1,7 +1,5 @@
-// API clients
 export { authApi, walletApi, externalApi, handleApiError } from './api';
 
-// Secure storage utilities
 export {
   setToken,
   getToken,
@@ -18,7 +16,6 @@ export {
   isTokenExpiringSoon,
 } from './storage';
 
-// Cryptocurrency data API
 export {
   cryptoApi,
   formatPrice,
@@ -26,8 +23,6 @@ export {
   formatLargeNumber,
 } from './cryptoApi';
 
-// Hugging Face AI API
-export {
-  huggingFaceApi,
-  ConversationManager,
-} from './huggingFaceApi';
+export { newsApi } from './newsApi';
+
+export { chatApi } from './chatApi'; 

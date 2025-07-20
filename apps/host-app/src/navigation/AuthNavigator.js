@@ -5,8 +5,7 @@ import { useTheme } from '@tradax/theme';
 import LoginScreen from '@tradax/auth/screens/LoginScreen';
 import SignupScreen from '@tradax/auth/screens/SignupScreen';
 import OTPScreen from '@tradax/auth/screens/OTPScreen';
-import ForgotPasswordScreen from '@tradax/auth/screens/ForgotPasswordScreen';
-import ResetPasswordScreen from '@tradax/auth/screens/ResetPasswordScreen'; 
+
 
 const Stack = createNativeStackNavigator();
 
@@ -17,13 +16,9 @@ export default function AuthNavigator() {
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={{
-        headerStyle: {
-          backgroundColor: theme.colors.background,
-        },
+        headerStyle: { backgroundColor: theme.colors.background },
         headerTintColor: theme.colors.text,
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerTitleStyle: { fontWeight: 'bold' },
       }}
     >
       <Stack.Screen
@@ -40,16 +35,6 @@ export default function AuthNavigator() {
         name="OTP"
         component={OTPScreen}
         options={{ title: 'Verify Account' }}
-      />
-      <Stack.Screen
-        name="ForgotPassword"
-        component={ForgotPasswordScreen}
-        options={{ title: 'Forgot Password' }}
-      />
-      <Stack.Screen
-        name="ResetPassword"
-        component={ResetPasswordScreen}
-        options={{ title: 'Reset Password' }} 
       />
     </Stack.Navigator>
   );

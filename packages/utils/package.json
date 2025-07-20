@@ -4,9 +4,10 @@
   "description": "Utility functions for TradaX",
   "main": "src/index.js",
   "dependencies": {
-    "expo-secure-store": "~12.3.0",
-    "expo-constants": "~14.4.0",
-    "react-native": "0.72.0"
+    "expo-constants": "~16.0.0",
+    "expo-secure-store": "~13.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.79.4"
   },
   "private": true
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Switch, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -10,9 +10,9 @@ import { authApi, removeToken } from '@tradax/utils';
 export default function SettingsScreen({ navigation }) {
   const { theme, toggleTheme, isDarkMode } = useTheme();
   const [profile, setProfile] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@example.com',
+    firstName: 'Kelvin',
+    lastName: 'Owusu',
+    email: 'kelvin.owusu@gmail.com',
   });
   const [notifications, setNotifications] = useState({
     priceAlerts: true,
@@ -25,22 +25,30 @@ export default function SettingsScreen({ navigation }) {
     biometricEnabled: false,
   });
 
-  const handleProfileUpdate = async () => {
-    try {
-      await authApi.updateProfile(profile);
-      Toast.show({
-        type: 'success',
-        text1: 'Profile Updated',
-        text2: 'Your profile has been successfully updated',
-      });
-    } catch (error) {
-      console.error('Profile update error:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Update Failed',
-        text2: error.message || 'Failed to update profile',
-      });
-    }
+  const handleProfileUpdate = () => {
+    Alert.alert('Confirm Update', 'Are you sure you want to update your profile?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Update',
+        onPress: async () => {
+          try {
+            await authApi.updateProfile(profile);
+            Toast.show({
+              type: 'success',
+              text1: 'Profile Updated',
+              text2: 'Your profile has been successfully updated',
+            });
+          } catch (error) {
+            console.error('Profile update error:', error);
+            Toast.show({
+              type: 'error',
+              text1: 'Update Failed',
+              text2: error.message || 'Failed to update profile',
+            });
+          }
+        },
+      },
+    ]);
   };
 
   const handleLogout = () => {
@@ -60,7 +68,7 @@ export default function SettingsScreen({ navigation }) {
                 text1: 'Logged Out',
                 text2: 'You have been successfully logged out',
               });
-              // Navigation will be handled by AppNavigator auth state change
+              // Navigation will be handled by auth state change
             } catch (error) {
               console.error('Logout error:', error);
             }
@@ -75,6 +83,7 @@ export default function SettingsScreen({ navigation }) {
       ...prev,
       [key]: !prev[key],
     }));
+    Toast.show({ type: 'success', text1: `${key} updated` });
   };
 
   const toggleSecurity = (key) => {
@@ -84,19 +93,37 @@ export default function SettingsScreen({ navigation }) {
     }));
   };
 
-  const SettingsSection = ({ title, children }) => (
+  const handleThemeToggle = () => {
+    toggleTheme();
+    Toast.show({
+      type: 'success',
+      text1: isDarkMode ? 'Switched to Light Mode' : 'Switched to Dark Mode',
+    });
+  };
+
+  const openLink = (url) => {
+    Linking.openURL(url);
+  };
+
+  const SettingsSection = ({ title, description, children }) => (
     <View style={styles.section}>
       <Typography variant="h3" style={[styles.sectionTitle, { color: theme.colors.text }]}>
         {title}
       </Typography>
+      {description && (
+        <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginHorizontal: 20, marginBottom: 8 }}>
+          {description}
+        </Typography>
+      )}
       <Card style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]}>
         {children}
       </Card>
+      <View style={{ height: 1, backgroundColor: theme.colors.border, marginVertical: 12 }} />
     </View>
   );
 
-  const SettingsRow = ({ title, subtitle, rightComponent, onPress }) => (
-    <View style={[styles.settingsRow, onPress && styles.pressableRow]}>
+  const SettingsRow = ({ title, subtitle, rightComponent, onPress, disabled = false }) => (
+    <View style={[styles.settingsRow, onPress && styles.pressableRow, disabled && { opacity: 0.5 }]}>
       <View style={styles.settingsRowContent}>
         <Typography variant="body1" style={{ color: theme.colors.text }}>
           {title}
@@ -115,7 +142,7 @@ export default function SettingsScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Section */}
-        <SettingsSection title="Profile">
+        <SettingsSection title="Profile" description="Customize your personal information">
           <Input
             placeholder="First Name"
             value={profile.firstName}
@@ -144,14 +171,14 @@ export default function SettingsScreen({ navigation }) {
         </SettingsSection>
 
         {/* Appearance Section */}
-        <SettingsSection title="Appearance">
+        <SettingsSection title="Appearance" description="Switch between light and dark themes">
           <SettingsRow
             title="Dark Mode"
             subtitle="Switch between light and dark themes"
             rightComponent={
               <Switch
                 value={isDarkMode}
-                onValueChange={toggleTheme}
+                onValueChange={handleThemeToggle}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
                 thumbColor={isDarkMode ? '#ffffff' : '#f4f3f4'}
               />
@@ -160,7 +187,7 @@ export default function SettingsScreen({ navigation }) {
         </SettingsSection>
 
         {/* Notifications Section */}
-        <SettingsSection title="Notifications">
+        <SettingsSection title="Notifications" description="Manage your notification preferences">
           <SettingsRow
             title="Price Alerts"
             subtitle="Get notified about significant price changes"
@@ -212,7 +239,7 @@ export default function SettingsScreen({ navigation }) {
         </SettingsSection>
 
         {/* Security Section */}
-        <SettingsSection title="Security">
+        <SettingsSection title="Security" description="Manage your security settings">
           <SettingsRow
             title="Two-Factor Authentication"
             subtitle="Add an extra layer of security (Coming Soon)"
@@ -225,6 +252,7 @@ export default function SettingsScreen({ navigation }) {
                 disabled={true}
               />
             }
+            disabled={true}
           />
           <SettingsRow
             title="Biometric Authentication"
@@ -238,11 +266,12 @@ export default function SettingsScreen({ navigation }) {
                 disabled={true}
               />
             }
+            disabled={true}
           />
         </SettingsSection>
 
         {/* About Section */}
-        <SettingsSection title="About">
+        <SettingsSection title="About" description="App details and policies">
           <SettingsRow
             title="Version"
             rightComponent={
@@ -254,7 +283,11 @@ export default function SettingsScreen({ navigation }) {
           <SettingsRow
             title="Privacy Policy"
             rightComponent={
-              <Typography variant="body2" style={{ color: theme.colors.primary }}>
+              <Typography
+                variant="body2"
+                style={{ color: theme.colors.primary }}
+                onPress={() => openLink('https://your-privacy-policy-url.com')}
+              >
                 View →
               </Typography>
             }
@@ -262,7 +295,11 @@ export default function SettingsScreen({ navigation }) {
           <SettingsRow
             title="Terms of Service"
             rightComponent={
-              <Typography variant="body2" style={{ color: theme.colors.primary }}>
+              <Typography
+                variant="body2"
+                style={{ color: theme.colors.primary }}
+                onPress={() => openLink('https://your-terms-url.com')}
+              >
                 View →
               </Typography>
             }

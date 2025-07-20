@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { Button, Input, Typography, Card } from '@tradax/ui';
 import { useTheme } from '@tradax/theme';
 import { authApi, setToken } from '@tradax/utils';
+
+import logo from '../../../host-app/assets/logo.png';
 
 export default function LoginScreen({ navigation }) {
   const { theme } = useTheme();
@@ -26,7 +28,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const response = await authApi.login({ email, password });
-      
+
       if (response.token) {
         await setToken(response.token);
         Toast.show({
@@ -34,7 +36,6 @@ export default function LoginScreen({ navigation }) {
           text1: 'Login Successful',
           text2: 'Welcome back to TradaX!',
         });
-        // Navigation will be handled by AppNavigator auth state change
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -52,10 +53,15 @@ export default function LoginScreen({ navigation }) {
     navigation.navigate('Signup');
   };
 
+  const navigateToForgotPassword = () => {
+    navigation.navigate('ForgotPassword'); 
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
+          <Image source={logo} style={styles.logo} resizeMode="contain" />
           <Typography variant="h1" style={[styles.title, { color: theme.colors.text }]}>
             TradaX
           </Typography>
@@ -87,11 +93,17 @@ export default function LoginScreen({ navigation }) {
           />
 
           <Button
-            title={loading ? "Signing In..." : "Sign In"}
+            title={loading ? 'Signing In...' : 'Sign In'}
             onPress={handleLogin}
             disabled={loading}
             style={styles.button}
           />
+
+          <TouchableOpacity onPress={navigateToForgotPassword} style={styles.forgotPassword}>
+            <Typography variant="caption" style={{ color: theme.colors.primary }}>
+              Forgot Password?
+            </Typography>
+          </TouchableOpacity>
 
           <Button
             title="Create New Account"
@@ -99,12 +111,6 @@ export default function LoginScreen({ navigation }) {
             onPress={navigateToSignup}
             style={styles.button}
           />
-
-          <View style={styles.biometricPlaceholder}>
-            <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>
-              Biometric authentication coming soon
-            </Typography>
-          </View>
         </Card>
 
         <View style={styles.footer}>
@@ -130,6 +136,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
+  },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
@@ -154,17 +165,13 @@ const styles = StyleSheet.create({
   button: {
     marginBottom: 12,
   },
-  biometricPlaceholder: {
-    alignItems: 'center',
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#ccc',
+  forgotPassword: {
+    alignItems: 'flex-end',
+    marginBottom: 16,
   },
   footer: {
     alignItems: 'center',
     marginTop: 20,
   },
 });
+

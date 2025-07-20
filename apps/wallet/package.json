@@ -4,11 +4,32 @@
   "description": "Wallet module for TradaX",
   "main": "src/index.js",
   "dependencies": {
-    "@tradax/ui": "*",
-    "@tradax/theme": "*",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@tradax/theme": "",
+    "@tradax/ui": "",
     "@tradax/utils": "*",
-    "react": "18.2.0",
-    "react-native": "0.72.0"
+    "expo-camera": "~15.0.0",
+    "expo-crypto": "~13.0.0",
+    "expo-secure-store": "~13.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.79.4",
+    "react-native-qrcode-svg": "^6.3.15"
   },
-  "private": true
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-native": "^0.72.8"
+  },
+  "private": true,
+  "keywords": [
+    "wallet",
+    "crypto",
+    "blockchain",
+    "tradax",
+    "react-native"
+  ],
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/",
+    "type-check": "tsc --noEmit"
+  }
 }

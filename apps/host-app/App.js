@@ -1,43 +1,64 @@
-import React, { Suspense, useEffect } from 'react';
+import AuthNavigator from './src/navigation/AuthNavigator';
+import 'react-native-url-polyfill/auto';
+import React, { Suspense } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import * as SplashScreen from 'expo-splash-screen';
+import { View, Text, StyleSheet } from 'react-native';
 import Toast from 'react-native-toast-message';
 
-import { ThemeProvider } from '@tradax/theme';
+import { ThemeProvider } from '../../packages/theme/src';
+
+// Local imports
 import Loading from './src/components/Loading';
 import AppNavigator from './src/navigation/AppNavigator';
+import { AuthProvider } from './src/context/AuthContext';
 
-// Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
+const styles = StyleSheet.create({
+  authContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    padding: 20,
+  },
+  authText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  authSubText: {
+    color: '#ccc',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+});
 
-export default function App() {
-  useEffect(() => {
-    async function prepare() {
-      try {
-        // Pre-load fonts, make any API calls you need to do here
-        // Simulate loading time for demonstration
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        // Tell the application to render
-        await SplashScreen.hideAsync();
-      }
-    }
+function AppContent() {
+  const isAuthenticated = true; // 🔥 Bypass login by forcing authenticated state
+  const isLoading = false; // Skip loading
 
-    prepare();
-  }, []);
+  if (isLoading) {
+    return <Loading />;
+  }
 
   return (
-    <ThemeProvider>
-      <NavigationContainer>
-        <StatusBar style="auto" />
+    <NavigationContainer>
+      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ThemeProvider>
         <Suspense fallback={<Loading />}>
-          <AppNavigator />
+          <AppContent />
+          <Toast />
         </Suspense>
-        <Toast />
-      </NavigationContainer>
-    </ThemeProvider>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
