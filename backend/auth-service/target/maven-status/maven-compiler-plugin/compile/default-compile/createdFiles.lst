@@ -4,10 +4,13 @@ com\tradax\auth\AuthServiceApplication.class
 com\tradax\auth\config\SecurityConfig.class
 com\tradax\auth\controller\AuthController$OTPRequest.class
 com\tradax\auth\service\AuthService.class
+com\tradax\auth\util\JwtRequestFilter.class
 com\tradax\auth\controller\AuthController$RegisterRequest.class
 com\tradax\auth\util\JwtUtil.class
+com\tradax\auth\filter\JwtAuthenticationFilter.class
 com\tradax\auth\controller\AuthController$ProfileUpdateRequest.class
 com\tradax\auth\model\User.class
 com\tradax\auth\controller\AuthController.class
+com\tradax\auth\payload\ResetPasswordRequest.class
 com\tradax\auth\controller\AuthController$LoginRequest.class
-com\tradax\auth\config\SecurityConfig$JwtAuthenticationFilter.class
+com\tradax\auth\payload\ForgotPasswordRequest.class

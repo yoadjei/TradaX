@@ -1,9 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 
-// Keys for secure storage
-const TOKEN_KEY = '@tradax/auth_token';
-const REFRESH_TOKEN_KEY = '@tradax/refresh_token';
-const USER_PREFERENCES_KEY = '@tradax/user_preferences';
+// ✅ Corrected Keys (Valid for SecureStore)
+const TOKEN_KEY = 'tradax_auth_token';
+const REFRESH_TOKEN_KEY = 'tradax_refresh_token';
+const USER_PREFERENCES_KEY = 'tradax_user_preferences';
 
 /**
  * Store authentication token securely
@@ -12,7 +12,7 @@ const USER_PREFERENCES_KEY = '@tradax/user_preferences';
  */
 export const setToken = async (token) => {
   try {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await SecureStore.setItemAsync(TOKEN_KEY, JSON.stringify(token));
   } catch (error) {
     console.error('Error storing token:', error);
     throw new Error('Failed to store authentication token');
