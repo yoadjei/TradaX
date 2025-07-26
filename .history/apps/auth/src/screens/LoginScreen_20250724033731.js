@@ -47,7 +47,7 @@ export default function LoginScreen() {
 
         navigation.reset({
           index: 0,
-          routes: [{ name: 'MainApp' }], 
+          routes: [{ name: 'Main' }], 
         });
       } else {
         throw new Error('Login succeeded but no token was returned.');
