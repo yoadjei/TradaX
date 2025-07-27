@@ -1,20 +1,26 @@
 package com.tradax.wallet.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tradax.wallet.model.Transaction;
 import com.tradax.wallet.model.Wallet;
 import com.tradax.wallet.repository.TransactionRepository;
 import com.tradax.wallet.repository.WalletRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.util.*;
 
 @Service
 @Transactional
@@ -28,6 +34,7 @@ public class WalletService {
     @Autowired
     private TransactionRepository transactionRepository;
 
+    private static final BigDecimal FEE_RATE = new BigDecimal("0.001");
     private static final Map<String, BigDecimal> CURRENT_PRICES = new HashMap<>() {{
         put("btc", new BigDecimal("45000.00"));
         put("eth", new BigDecimal("3000.00"));
@@ -39,279 +46,222 @@ public class WalletService {
     @Transactional(readOnly = true)
     public List<Wallet> getUserWallets(String userEmail) {
         List<Wallet> wallets = walletRepository.findByUserEmail(userEmail);
-
         if (wallets.isEmpty()) {
             wallets = createInitialWallets(userEmail);
         }
-
-        for (Wallet wallet : wallets) {
-            wallet.setPrice(getCurrentPrice(wallet.getAsset()));
-        }
-
+        wallets.forEach(w -> w.setPrice(getCurrentPrice(w.getAsset())));
         return wallets;
     }
 
     private List<Wallet> createInitialWallets(String userEmail) {
         logger.info("Creating initial wallets for user: {}", userEmail);
-
-        String[] assets = {"BTC", "ETH", "ADA", "SOL", "USD"};
-        String[] assetNames = {"Bitcoin", "Ethereum", "Cardano", "Solana", "US Dollar"};
-
-        for (int i = 0; i < assets.length; i++) {
-            Wallet wallet = new Wallet();
-            wallet.setUserEmail(userEmail);
-            wallet.setAsset(assets[i]);
-            wallet.setSymbol(assets[i]);
-            wallet.setName(assetNames[i]);
-            wallet.setBalance(BigDecimal.ZERO);
-            wallet.setPrice(getCurrentPrice(assets[i]));
-            wallet.setCreatedAt(LocalDateTime.now());
-            wallet.setUpdatedAt(LocalDateTime.now());
-
-            if ("USD".equals(assets[i])) {
-                wallet.setBalance(new BigDecimal("10000.00"));
-            }
-
-            walletRepository.save(wallet);
+        String[] assets = {"BTC","ETH","ADA","SOL","USD"};
+        String[] names  = {"Bitcoin","Ethereum","Cardano","Solana","US Dollar"};
+        for(int i=0;i<assets.length;i++){
+            Wallet w = new Wallet();
+            w.setUserEmail(userEmail);
+            w.setAsset(assets[i]);
+            w.setSymbol(assets[i]);
+            w.setName(names[i]);
+            w.setBalance(BigDecimal.ZERO);
+            if("USD".equals(assets[i])) w.setBalance(new BigDecimal("10000.00"));
+            w.setPrice(getCurrentPrice(assets[i]));
+            w.setCreatedAt(LocalDateTime.now());
+            w.setUpdatedAt(LocalDateTime.now());
+            walletRepository.save(w);
         }
-
         return walletRepository.findByUserEmail(userEmail);
     }
 
     public Transaction deposit(String userEmail, String asset, BigDecimal amount) {
-        logger.info("Processing deposit: user={}, asset={}, amount={}", userEmail, asset, amount);
+        if(amount.compareTo(BigDecimal.ZERO)<=0)
+            throw new RuntimeException("Deposit amount must be > 0");
+        Wallet w = getOrCreateWallet(userEmail, asset.toUpperCase());
+        w.setBalance(w.getBalance().add(amount));
+        w.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(w);
 
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Deposit amount must be greater than zero");
-        }
-
-        Wallet wallet = getOrCreateWallet(userEmail, asset.toUpperCase());
-
-        wallet.setBalance(wallet.getBalance().add(amount));
-        wallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(wallet);
-
-        Transaction transaction = new Transaction();
-        transaction.setUserEmail(userEmail);
-        transaction.setType(Transaction.TransactionType.DEPOSIT);
-        transaction.setAsset(asset.toUpperCase());
-        transaction.setAmount(amount);
         BigDecimal price = getCurrentPrice(asset);
-        transaction.setPrice(price);
-        transaction.setValue(amount.multiply(price));
-        transaction.setStatus(Transaction.TransactionStatus.COMPLETED);
-        transaction.setCreatedAt(LocalDateTime.now());
+        BigDecimal value = amount.multiply(price);
 
-        return transactionRepository.save(transaction);
+        Transaction t = new Transaction();
+        t.setUserEmail(userEmail);
+        t.setType(Transaction.TransactionType.DEPOSIT);
+        t.setAsset(asset.toUpperCase());
+        t.setAmount(amount);
+        t.setPrice(price);
+        t.setValue(value);
+        t.setStatus(Transaction.TransactionStatus.COMPLETED);
+        t.setCreatedAt(LocalDateTime.now());
+        return transactionRepository.save(t);
     }
 
     public Transaction withdraw(String userEmail, String asset, BigDecimal amount) {
-        logger.info("Processing withdrawal: user={}, asset={}, amount={}", userEmail, asset, amount);
+        if(amount.compareTo(BigDecimal.ZERO)<=0)
+            throw new RuntimeException("Withdrawal amount must be > 0");
+        Wallet w = getOrCreateWallet(userEmail, asset.toUpperCase());
+        if(w.getBalance().compareTo(amount)<0)
+            throw new RuntimeException("Insufficient balance");
+        w.setBalance(w.getBalance().subtract(amount));
+        w.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(w);
 
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Withdrawal amount must be greater than zero");
-        }
-
-        Wallet wallet = getOrCreateWallet(userEmail, asset.toUpperCase());
-
-        if (wallet.getBalance().compareTo(amount) < 0) {
-            throw new RuntimeException("Insufficient balance for withdrawal");
-        }
-
-        wallet.setBalance(wallet.getBalance().subtract(amount));
-        wallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(wallet);
-
-        Transaction transaction = new Transaction();
-        transaction.setUserEmail(userEmail);
-        transaction.setType(Transaction.TransactionType.WITHDRAWAL);
-        transaction.setAsset(asset.toUpperCase());
-        transaction.setAmount(amount);
         BigDecimal price = getCurrentPrice(asset);
-        transaction.setPrice(price);
-        transaction.setValue(amount.multiply(price));
-        transaction.setStatus(Transaction.TransactionStatus.COMPLETED);
-        transaction.setCreatedAt(LocalDateTime.now());
+        BigDecimal value = amount.multiply(price);
 
-        return transactionRepository.save(transaction);
+        Transaction t = new Transaction();
+        t.setUserEmail(userEmail);
+        t.setType(Transaction.TransactionType.WITHDRAWAL);
+        t.setAsset(asset.toUpperCase());
+        t.setAmount(amount);
+        t.setPrice(price);
+        t.setValue(value);
+        t.setStatus(Transaction.TransactionStatus.COMPLETED);
+        t.setCreatedAt(LocalDateTime.now());
+        return transactionRepository.save(t);
     }
 
     public Transaction executeTrade(String userEmail, String type, String asset, BigDecimal amount, BigDecimal price) {
-        logger.info("Executing trade: user={}, type={}, asset={}, amount={}, price={}",
-                userEmail, type, asset, amount, price);
-
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Trade amount must be greater than zero");
-        }
-
-        if (price.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Trade price must be greater than zero");
-        }
-
-        BigDecimal totalValue = amount.multiply(price);
-
-        if ("buy".equalsIgnoreCase(type)) {
-            return executeBuyTrade(userEmail, asset.toUpperCase(), amount, price, totalValue);
-        } else if ("sell".equalsIgnoreCase(type)) {
-            return executeSellTrade(userEmail, asset.toUpperCase(), amount, price, totalValue);
+        BigDecimal total = amount.multiply(price);
+        if("buy".equalsIgnoreCase(type)) {
+            return executeBuy(userEmail, asset.toUpperCase(), amount, price, total);
+        } else if("sell".equalsIgnoreCase(type)) {
+            return executeSell(userEmail, asset.toUpperCase(), amount, price, total);
         } else {
-            throw new RuntimeException("Invalid trade type. Must be 'buy' or 'sell'");
+            throw new RuntimeException("Invalid trade type");
         }
     }
 
-    private Transaction executeBuyTrade(String userEmail, String asset, BigDecimal amount, BigDecimal price, BigDecimal totalValue) {
-        Wallet usdWallet = getOrCreateWallet(userEmail, "USD");
+    private Transaction executeBuy(String userEmail, String asset, BigDecimal amount, BigDecimal price, BigDecimal total) {
+        Wallet usd = getOrCreateWallet(userEmail, "USD");
+        BigDecimal fee = total.multiply(FEE_RATE);
+        BigDecimal cost = total.add(fee);
+        if(usd.getBalance().compareTo(cost)<0)
+            throw new RuntimeException("Insufficient USD for purchase with fees");
+        usd.setBalance(usd.getBalance().subtract(cost));
+        usd.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(usd);
 
-        if (usdWallet.getBalance().compareTo(totalValue) < 0) {
-            throw new RuntimeException("Insufficient USD balance for purchase");
-        }
+        Wallet assetW = getOrCreateWallet(userEmail, asset);
+        assetW.setBalance(assetW.getBalance().add(amount));
+        assetW.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(assetW);
 
-        Wallet assetWallet = getOrCreateWallet(userEmail, asset);
-
-        usdWallet.setBalance(usdWallet.getBalance().subtract(totalValue));
-        usdWallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(usdWallet);
-
-        assetWallet.setBalance(assetWallet.getBalance().add(amount));
-        assetWallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(assetWallet);
-
-        Transaction transaction = new Transaction();
-        transaction.setUserEmail(userEmail);
-        transaction.setType(Transaction.TransactionType.BUY);
-        transaction.setAsset(asset);
-        transaction.setAmount(amount);
-        transaction.setPrice(price);
-        transaction.setValue(totalValue);
-        transaction.setStatus(Transaction.TransactionStatus.COMPLETED);
-        transaction.setCreatedAt(LocalDateTime.now());
-
-        return transactionRepository.save(transaction);
+        Transaction t = new Transaction();
+        t.setUserEmail(userEmail);
+        t.setType(Transaction.TransactionType.BUY);
+        t.setAsset(asset);
+        t.setAmount(amount);
+        t.setPrice(price);
+        t.setValue(total);
+        t.setStatus(Transaction.TransactionStatus.COMPLETED);
+        t.setCreatedAt(LocalDateTime.now());
+        return transactionRepository.save(t);
     }
 
-    private Transaction executeSellTrade(String userEmail, String asset, BigDecimal amount, BigDecimal price, BigDecimal totalValue) {
-        Wallet assetWallet = getOrCreateWallet(userEmail, asset);
+    private Transaction executeSell(String userEmail, String asset, BigDecimal amount, BigDecimal price, BigDecimal total) {
+        Wallet assetW = getOrCreateWallet(userEmail, asset);
+        if(assetW.getBalance().compareTo(amount)<0)
+            throw new RuntimeException("Insufficient asset balance");
+        BigDecimal fee = total.multiply(FEE_RATE);
+        BigDecimal proceeds = total.subtract(fee);
 
-        if (assetWallet.getBalance().compareTo(amount) < 0) {
-            throw new RuntimeException("Insufficient " + asset + " balance for sale");
-        }
+        assetW.setBalance(assetW.getBalance().subtract(amount));
+        assetW.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(assetW);
 
-        Wallet usdWallet = getOrCreateWallet(userEmail, "USD");
+        Wallet usd = getOrCreateWallet(userEmail, "USD");
+        usd.setBalance(usd.getBalance().add(proceeds));
+        usd.setUpdatedAt(LocalDateTime.now());
+        walletRepository.save(usd);
 
-        assetWallet.setBalance(assetWallet.getBalance().subtract(amount));
-        assetWallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(assetWallet);
-
-        usdWallet.setBalance(usdWallet.getBalance().add(totalValue));
-        usdWallet.setUpdatedAt(LocalDateTime.now());
-        walletRepository.save(usdWallet);
-
-        Transaction transaction = new Transaction();
-        transaction.setUserEmail(userEmail);
-        transaction.setType(Transaction.TransactionType.SELL);
-        transaction.setAsset(asset);
-        transaction.setAmount(amount);
-        transaction.setPrice(price);
-        transaction.setValue(totalValue);
-        transaction.setStatus(Transaction.TransactionStatus.COMPLETED);
-        transaction.setCreatedAt(LocalDateTime.now());
-
-        return transactionRepository.save(transaction);
+        Transaction t = new Transaction();
+        t.setUserEmail(userEmail);
+        t.setType(Transaction.TransactionType.SELL);
+        t.setAsset(asset);
+        t.setAmount(amount);
+        t.setPrice(price);
+        t.setValue(total);
+        t.setStatus(Transaction.TransactionStatus.COMPLETED);
+        t.setCreatedAt(LocalDateTime.now());
+        return transactionRepository.save(t);
     }
 
     @Transactional(readOnly = true)
     public Page<Transaction> getTransactionHistory(String userEmail, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        return transactionRepository.findByUserEmail(userEmail, pageable);
+        return transactionRepository.findByUserEmail(
+            userEmail,
+            PageRequest.of(page, size, Sort.by("createdAt").descending())
+        );
     }
 
     @Transactional(readOnly = true)
     public BigDecimal calculateTotalPortfolioValue(String userEmail) {
-        List<Wallet> wallets = walletRepository.findByUserEmail(userEmail);
-        BigDecimal totalValue = BigDecimal.ZERO;
-
-        for (Wallet wallet : wallets) {
-            BigDecimal currentPrice = getCurrentPrice(wallet.getAsset());
-            BigDecimal walletValue = wallet.getBalance().multiply(currentPrice);
-            totalValue = totalValue.add(walletValue);
-        }
-
-        return totalValue.setScale(2, RoundingMode.HALF_UP);
+        return walletRepository.findByUserEmail(userEmail).stream()
+            .map(w -> w.getBalance().multiply(getCurrentPrice(w.getAsset())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> getPortfolioPerformance(String userEmail) {
-        Map<String, Object> performance = new HashMap<>();
-
-        BigDecimal totalValue = calculateTotalPortfolioValue(userEmail);
-        BigDecimal initialValue = new BigDecimal("10000.00");
-        BigDecimal gain = totalValue.subtract(initialValue);
-        BigDecimal gainPercentage = initialValue.compareTo(BigDecimal.ZERO) == 0
-                ? BigDecimal.ZERO
-                : gain.divide(initialValue, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"));
-
-        performance.put("totalValue", totalValue);
-        performance.put("initialValue", initialValue);
-        performance.put("totalGain", gain.setScale(2, RoundingMode.HALF_UP));
-        performance.put("totalGainPercentage", gainPercentage.setScale(2, RoundingMode.HALF_UP));
-        performance.put("dayChange", new BigDecimal("0.00"));
-        performance.put("dayChangePercentage", new BigDecimal("0.00"));
-
-        return performance;
+    public Map<String,Object> getPortfolioPerformance(String userEmail) {
+        BigDecimal total = calculateTotalPortfolioValue(userEmail);
+        BigDecimal init  = new BigDecimal("10000.00");
+        BigDecimal gain  = total.subtract(init);
+        BigDecimal pct   = init.compareTo(BigDecimal.ZERO)==0
+            ? BigDecimal.ZERO
+            : gain.divide(init,4,RoundingMode.HALF_UP).multiply(new BigDecimal("100"));
+        Map<String,Object> perf = new HashMap<>();
+        perf.put("totalValue", total);
+        perf.put("initialValue", init);
+        perf.put("totalGain", gain.setScale(2,RoundingMode.HALF_UP));
+        perf.put("totalGainPercentage", pct.setScale(2,RoundingMode.HALF_UP));
+        perf.put("dayChange", BigDecimal.ZERO);
+        perf.put("dayChangePercentage", BigDecimal.ZERO);
+        return perf;
     }
 
     @Transactional(readOnly = true)
     public BigDecimal calculateProfitLoss(String userEmail) {
-        BigDecimal totalSellValue = transactionRepository
-                .findByUserEmailAndType(userEmail, Transaction.TransactionType.SELL)
-                .stream()
-                .map(t -> Optional.ofNullable(t.getValue()).orElse(BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal totalBuyValue = transactionRepository
-                .findByUserEmailAndType(userEmail, Transaction.TransactionType.BUY)
-                .stream()
-                .map(t -> Optional.ofNullable(t.getValue()).orElse(BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        return totalSellValue.subtract(totalBuyValue).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal sells = transactionRepository.findByUserEmailAndType(userEmail, Transaction.TransactionType.SELL)
+            .stream().map(t->Optional.ofNullable(t.getValue()).orElse(BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal buys  = transactionRepository.findByUserEmailAndType(userEmail, Transaction.TransactionType.BUY)
+            .stream().map(t->Optional.ofNullable(t.getValue()).orElse(BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sells.subtract(buys).setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)
     public BigDecimal getTotalTradingVolume(String userEmail) {
         BigDecimal vol = transactionRepository.calculateTotalTradingVolume(userEmail);
-        return (vol == null ? BigDecimal.ZERO : vol).setScale(2, RoundingMode.HALF_UP);
+        return (vol==null?BigDecimal.ZERO:vol).setScale(2,RoundingMode.HALF_UP);
     }
 
     private Wallet getOrCreateWallet(String userEmail, String asset) {
         return walletRepository.findByUserEmailAndAsset(userEmail, asset)
-                .orElseGet(() -> {
-                    Wallet wallet = new Wallet();
-                    wallet.setUserEmail(userEmail);
-                    wallet.setAsset(asset);
-                    wallet.setSymbol(asset);
-                    wallet.setName(getAssetName(asset));
-                    wallet.setBalance(BigDecimal.ZERO);
-                    wallet.setPrice(getCurrentPrice(asset));
-                    wallet.setCreatedAt(LocalDateTime.now());
-                    wallet.setUpdatedAt(LocalDateTime.now());
-                    return walletRepository.save(wallet);
-                });
+            .orElseGet(() -> {
+                Wallet w = new Wallet();
+                w.setUserEmail(userEmail);
+                w.setAsset(asset);
+                w.setSymbol(asset);
+                w.setName(getAssetName(asset));
+                w.setBalance(BigDecimal.ZERO);
+                w.setPrice(getCurrentPrice(asset));
+                w.setCreatedAt(LocalDateTime.now());
+                w.setUpdatedAt(LocalDateTime.now());
+                return walletRepository.save(w);
+            });
     }
 
     private BigDecimal getCurrentPrice(String asset) {
         return CURRENT_PRICES.getOrDefault(asset.toLowerCase(), BigDecimal.ONE);
     }
 
-    private String getAssetName(String symbol) {
-        Map<String, String> assetNames = new HashMap<>() {{
-            put("BTC", "Bitcoin");
-            put("ETH", "Ethereum");
-            put("ADA", "Cardano");
-            put("SOL", "Solana");
-            put("USD", "US Dollar");
-        }};
-
-        return assetNames.getOrDefault(symbol.toUpperCase(), symbol);
+    private String getAssetName(String s) {
+        Map<String,String> m = Map.of(
+            "BTC","Bitcoin","ETH","Ethereum","ADA","Cardano","SOL","Solana","USD","US Dollar"
+        );
+        return m.getOrDefault(s.toUpperCase(), s);
     }
 }

@@ -1,4 +1,3 @@
-// screens/TradingScreen.js
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -36,7 +35,7 @@ const RANGES = [
 
 const CHART_TYPES = ['candle', 'line'];
 const ORDER_TABS = ['Buy', 'Sell'];
-const ORDER_TYPES = ['market', 'limit', 'stop']; // OKX-style: market/limit/stop
+const ORDER_TYPES = ['market', 'limit', 'stop'];
 
 export default function TradingScreen() {
   const { theme } = useTheme();
@@ -46,10 +45,9 @@ export default function TradingScreen() {
   const [priceHistory, setPriceHistory] = useState([]);
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
   const [recentTrades, setRecentTrades] = useState([]);
-
   const [loading, setLoading] = useState(true);
 
-  const [range, setRange] = useState(RANGES[1]); // 1W default
+  const [range, setRange] = useState(RANGES[1]);
   const [chartType, setChartType] = useState('candle');
 
   const [activeOrderSide, setActiveOrderSide] = useState('Buy');
@@ -81,30 +79,43 @@ export default function TradingScreen() {
   }, [selectedAsset, range]);
 
   const fetchAll = async () => {
-    setLoading(true);
-    try {
-      const [coin, history, bal, book, trades] = await Promise.all([
-        cryptoApi.getCoinDetails(selectedAsset),
-        cryptoApi.getPriceHistory(selectedAsset, range.days),
-        walletApi.balance?.() ?? { usd: 0, assets: {} },
-        cryptoApi.getOrderBook?.(selectedAsset) ?? { bids: [], asks: [] },
-        cryptoApi.getRecentTrades?.(selectedAsset) ?? [],
-      ]);
+  setLoading(true);
+  try {
+    const [coin, history, balRaw, book, trades] = await Promise.all([
+      cryptoApi.getCoinDetails(selectedAsset),
+      cryptoApi.getPriceHistory(selectedAsset, range.days),
+      walletApi.getBalances(),
+      cryptoApi.getOrderBook?.(selectedAsset) ?? { bids: [], asks: [] },
+      walletApi.getUserTrades?.(selectedAsset) ?? [],
+    ]);
 
-      setAssetData(coin);
-      setPriceHistory(history ?? []);
-      setBalance(bal ?? { usd: 0, assets: {} });
-      setOrderBook({
-        bids: Array.isArray(book?.bids) ? book.bids : [],
-        asks: Array.isArray(book?.asks) ? book.asks : [],
-      });
-      setRecentTrades(Array.isArray(trades) ? trades.slice(0, 30) : []);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to fetch trading data' });
-    } finally {
-      setLoading(false);
-    }
-  };
+    const wallets = Array.isArray(balRaw.balances) ? balRaw.balances : [];
+    const usdWallet = wallets.find(w => w.getAsset?.toUpperCase
+      ? w.getAsset().toUpperCase() === 'USD'
+      : w.asset === 'USD'
+    );
+    const usd = usdWallet ? Number(usdWallet.balance) : 0;
+    const assets = wallets.reduce((map, w) => {
+      const sym = (w.getAsset?.() || w.asset || '').toLowerCase();
+      map[sym] = Number(w.getBalance?.() ?? w.balance);
+      return map;
+    }, {});
+    setBalance({ usd, assets });
+
+    setAssetData(coin);
+    setPriceHistory(history ?? []);
+    setOrderBook({
+      bids: Array.isArray(book?.bids) ? book.bids : [],
+      asks: Array.isArray(book?.asks) ? book.asks : [],
+    });
+    setRecentTrades(Array.isArray(trades) ? trades.slice(0, 30) : []);
+  } catch (e) {
+    Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to fetch trading data' });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const price = useMemo(() => Number(assetData?.priceUsd ?? 0), [assetData]);
   const priceChange24h = formatPercentageChange(assetData?.changePercent24Hr ?? 0);
@@ -174,7 +185,7 @@ export default function TradingScreen() {
     try {
       await walletApi.trade({
         asset: assetData.symbol.toLowerCase(),
-        type: activeOrderSide.toLowerCase(), // buy | sell
+        type: activeOrderSide.toLowerCase(),
         orderType,
         amount: numericAmount,
         price: executionPrice,
@@ -189,14 +200,14 @@ export default function TradingScreen() {
         text2: `${orderType.toUpperCase()} ${activeOrderSide.toUpperCase()} ${numericAmount} ${assetData.symbol}`,
       });
       closeTradeModal();
-      fetchAll();
+      await fetchAll(); // Refresh balances and user trades
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Trade Failed', text2: e?.message || 'Could not submit order' });
     }
   };
 
   const renderOrderBookRow = (row, type, maxTotal) => {
-    const [p, q] = row; // [price, qty]
+    const [p, q] = row;
     const total = Number(q);
     const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
     const colorBg = type === 'ask' ? theme.colors.error + '22' : theme.colors.success + '22';

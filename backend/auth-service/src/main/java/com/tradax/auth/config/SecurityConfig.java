@@ -57,6 +57,7 @@ public class SecurityConfig {
                         "/auth/forgot-password",
                         "/auth/reset-password"
                 ).permitAll()
+                .antMatchers(HttpMethod.PUT, "/auth/**").authenticated()
                 .antMatchers("/h2-console/**").permitAll()
                 .anyRequest().authenticated()
             )
@@ -67,7 +68,6 @@ public class SecurityConfig {
                 .logoutSuccessHandler((request, response, authentication) -> SecurityContextHolder.clearContext())
             );
 
-        // Enable H2 console during development
         http.headers().frameOptions().disable();
 
         return http.build();
@@ -77,8 +77,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

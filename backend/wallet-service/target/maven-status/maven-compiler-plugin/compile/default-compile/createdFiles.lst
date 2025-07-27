@@ -4,7 +4,6 @@ com\tradax\wallet\controller\WalletController.class
 com\tradax\wallet\util\JwtUtil.class
 com\tradax\wallet\model\Transaction$TransactionType.class
 com\tradax\wallet\controller\WalletController$DepositRequest.class
-com\tradax\wallet\service\WalletService$2.class
 com\tradax\wallet\config\SecurityConfig.class
 com\tradax\wallet\controller\WalletController$WithdrawRequest.class
 com\tradax\wallet\model\Transaction$TransactionStatus.class
@@ -13,4 +12,5 @@ com\tradax\wallet\model\Wallet.class
 com\tradax\wallet\WalletServiceApplication.class
 com\tradax\wallet\controller\WalletController$TradeRequest.class
 com\tradax\wallet\service\WalletService.class
+com\tradax\wallet\filter\JwtAuthenticationFilter.class
 com\tradax\wallet\repository\TransactionRepository.class

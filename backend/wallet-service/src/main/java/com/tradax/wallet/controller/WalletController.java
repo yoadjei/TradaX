@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,7 +42,6 @@ public class WalletController {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             List<Wallet> wallets = walletService.getUserWallets(userEmail);
             BigDecimal totalValue = walletService.calculateTotalPortfolioValue(userEmail);
-
             Map<String, Object> response = new HashMap<>();
             response.put("balances", wallets);
             response.put("totalValue", totalValue);
@@ -60,7 +58,6 @@ public class WalletController {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             Transaction transaction = walletService.deposit(userEmail, request.getAsset(), request.getAmount());
-
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Deposit successful");
             response.put("transaction", transaction);
@@ -76,7 +73,6 @@ public class WalletController {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             Transaction transaction = walletService.withdraw(userEmail, request.getAsset(), request.getAmount());
-
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Withdrawal successful");
             response.put("transaction", transaction);
@@ -91,9 +87,7 @@ public class WalletController {
     public ResponseEntity<Map<String, Object>> trade(@Valid @RequestBody TradeRequest request) {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
-            Transaction transaction = walletService.executeTrade(
-                    userEmail, request.getType(), request.getAsset(), request.getAmount(), request.getPrice());
-
+            Transaction transaction = walletService.executeTrade(userEmail, request.getType(), request.getAsset(), request.getAmount(), request.getPrice());
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Trade executed successfully");
             response.put("transaction", transaction);
@@ -105,13 +99,11 @@ public class WalletController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<Map<String, Object>> getTransactionHistory(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<Map<String, Object>> getTransactionHistory(@RequestParam(defaultValue = "0") int page,
+                                                                       @RequestParam(defaultValue = "20") int size) {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             Page<Transaction> transactions = walletService.getTransactionHistory(userEmail, page, size);
-
             Map<String, Object> response = new HashMap<>();
             response.put("transactions", transactions.getContent());
             response.put("totalElements", transactions.getTotalElements());
@@ -132,7 +124,6 @@ public class WalletController {
             List<Wallet> wallets = walletService.getUserWallets(userEmail);
             BigDecimal totalValue = walletService.calculateTotalPortfolioValue(userEmail);
             Map<String, Object> performanceMetrics = walletService.getPortfolioPerformance(userEmail);
-
             Map<String, Object> response = new HashMap<>();
             response.put("wallets", wallets);
             response.put("totalValue", totalValue);
@@ -150,7 +141,6 @@ public class WalletController {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             BigDecimal totalVolume = walletService.getTotalTradingVolume(userEmail);
-
             Map<String, Object> response = new HashMap<>();
             response.put("totalTradingVolume", totalVolume);
             response.put("currency", "USD");
@@ -166,7 +156,6 @@ public class WalletController {
         try {
             String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
             BigDecimal pnl = walletService.calculateProfitLoss(userEmail);
-
             Map<String, Object> response = new HashMap<>();
             response.put("profitLoss", pnl);
             response.put("currency", "USD");
@@ -209,7 +198,7 @@ public class WalletController {
 
     public static class TradeRequest {
         @javax.validation.constraints.NotBlank
-        @javax.validation.constraints.Pattern(regexp = "buy|sell", message = "Type must be 'buy' or 'sell'")
+        @javax.validation.constraints.Pattern(regexp = "buy|sell")
         private String type;
         @javax.validation.constraints.NotBlank
         private String asset;

@@ -1,7 +1,10 @@
 package com.tradax.auth.controller;
 
-import com.tradax.auth.model.User;
-import com.tradax.auth.service.AuthService;
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.validation.Valid;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,11 +12,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import javax.validation.Valid;
-import java.util.HashMap;
-import java.util.Map;
+import com.tradax.auth.model.User;
+import com.tradax.auth.service.AuthService;
 
 /**
  * REST controller for authentication endpoints
@@ -154,10 +163,29 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> updateProfile(@Valid @RequestBody ProfileUpdateRequest request) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            String email = authentication.getName();
+            if (authentication == null || !authentication.isAuthenticated() ||
+                    authentication.getPrincipal() == null ||
+                    "anonymousUser".equals(authentication.getPrincipal())) {
+                Map<String, Object> res = new HashMap<>();
+                res.put("error", "Unauthorized");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(res);
+            }
+
+            String email;
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof org.springframework.security.core.userdetails.UserDetails) {
+                email = ((org.springframework.security.core.userdetails.UserDetails) principal).getUsername();
+            } else {
+                email = authentication.getName();
+            }
+
             logger.info("Profile update request for email: {}", email);
 
-            User user = authService.updateProfile(email, request.getFirstName(), request.getLastName());
+            User user = authService.updateProfile(
+                    email,
+                    request.getFirstName() != null ? request.getFirstName().trim() : null,
+                    request.getLastName() != null ? request.getLastName().trim() : null
+            );
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Profile updated successfully");

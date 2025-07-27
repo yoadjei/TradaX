@@ -54,8 +54,8 @@
       ]
     ],
     "extra": {
-       "authServiceUrl": "http://10.1.13.239:8083",
-  "walletServiceUrl": "http://10.1.13.239:8082",
+       "authServiceUrl": "http://172.20.10.4:8083",
+  "walletServiceUrl": "http://172.20.10.4:8082",
       "rapidApiChatKey": "d6a0a5d78emsh56e2e956a52b8b3p1fbd32jsn94aab31c9a50",
       "coingeckoApiKey": "CG-vcmG4LCUUDVFNxdZeTt4Nbb4",
       "gnewsApiKey": "b94bb9dbcc8ca93ac8b953ad25f75595",

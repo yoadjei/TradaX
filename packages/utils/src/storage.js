@@ -12,7 +12,7 @@ const USER_PREFERENCES_KEY = 'tradax_user_preferences';
  */
 export const setToken = async (token) => {
   try {
-    await SecureStore.setItemAsync(TOKEN_KEY, JSON.stringify(token));
+    await SecureStore.setItemAsync(TOKEN_KEY, token);
   } catch (error) {
     console.error('Error storing token:', error);
     throw new Error('Failed to store authentication token');
@@ -25,7 +25,13 @@ export const setToken = async (token) => {
  */
 export const getToken = async () => {
   try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+    if (!token) return null;
+    // in case an older version saved it as a JSON string with quotes
+    if (token.startsWith('"') && token.endsWith('"')) {
+      return token.slice(1, -1);
+    }
+    return token;
   } catch (error) {
     console.error('Error retrieving token:', error);
     return null;
@@ -151,18 +157,15 @@ export const isTokenValid = async () => {
   try {
     const token = await getToken();
     if (!token) return false;
-    
-    // Basic JWT format validation (3 parts separated by dots)
+
     const parts = token.split('.');
     if (parts.length !== 3) return false;
-    
-    // Check if token is expired (basic check)
+
     try {
       const payload = JSON.parse(atob(parts[1]));
       const currentTime = Math.floor(Date.now() / 1000);
       return payload.exp > currentTime;
     } catch {
-      // If we can't decode the payload, assume token is invalid
       return false;
     }
   } catch (error) {
@@ -179,10 +182,10 @@ export const getTokenExpiration = async () => {
   try {
     const token = await getToken();
     if (!token) return null;
-    
+
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    
+
     const payload = JSON.parse(atob(parts[1]));
     return payload.exp;
   } catch (error) {
@@ -199,10 +202,10 @@ export const isTokenExpiringSoon = async () => {
   try {
     const expiration = await getTokenExpiration();
     if (!expiration) return true;
-    
+
     const currentTime = Math.floor(Date.now() / 1000);
-    const fiveMinutes = 5 * 60; // 5 minutes in seconds
-    
+    const fiveMinutes = 5 * 60;
+
     return (expiration - currentTime) <= fiveMinutes;
   } catch (error) {
     console.error('Error checking token expiration:', error);

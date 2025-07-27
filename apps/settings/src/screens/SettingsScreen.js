@@ -56,7 +56,7 @@ function securityReducer(state, action) {
 
 export default function SettingsScreen() {
   const { theme, toggleTheme, isDarkMode } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, setUser } = useAuth();
 
   const [profile, setProfile] = useState({ firstName: '', lastName: '', email: '' });
   const [notifications, dispatchNotifications] = useReducer(notificationsReducer, notificationsInitial);
@@ -95,10 +95,21 @@ export default function SettingsScreen() {
         text: 'Update',
         onPress: async () => {
           try {
-            await authApi.updateProfile({
+            const res = await authApi.updateProfile({
               firstName: profile.firstName,
               lastName: profile.lastName,
             });
+
+            if (res?.user) {
+              setUser(res.user);
+              setProfile((p) => ({
+                ...p,
+                firstName: res.user.firstName,
+                lastName: res.user.lastName,
+                email: res.user.email,
+              }));
+            }
+
             Toast.show({ type: 'success', text1: 'Profile Updated' });
           } catch (error) {
             Toast.show({ type: 'error', text1: 'Update Failed', text2: error.message });

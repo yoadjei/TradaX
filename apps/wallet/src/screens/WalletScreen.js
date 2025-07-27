@@ -72,27 +72,20 @@ export default function WalletScreen() {
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await walletApi.getBalances();
-        if (!cancelled) {
-          setServerBalances(Array.isArray(res?.balances) ? res.balances : []);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          Toast.show({ type: 'error', text1: 'Error', text2: e?.message ?? 'Failed to fetch data' });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+    refreshBalances();
   }, []);
+
+  const refreshBalances = async () => {
+    setLoading(true);
+    try {
+      const res = await walletApi.getBalances();
+      setServerBalances(Array.isArray(res?.balances) ? res.balances : []);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Error', text2: e?.message ?? 'Failed to fetch data' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -127,14 +120,8 @@ export default function WalletScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try {
-      const res = await walletApi.getBalances();
-      setServerBalances(Array.isArray(res?.balances) ? res.balances : []);
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Error', text2: e?.message ?? 'Failed to refresh' });
-    } finally {
-      setRefreshing(false);
-    }
+    await refreshBalances();
+    setRefreshing(false);
   };
 
   const bySymbol = useMemo(() => {
@@ -203,16 +190,6 @@ export default function WalletScreen() {
     return sorted;
   }, [balancesByTab, activeTab, showSearchBar, search, sortKey, sortDir]);
 
-  const filteredForSearchModal = useMemo(() => {
-    const list = balancesByTab[activeTab] || [];
-    if (!search) return [];
-    return list.filter(
-      i =>
-        i.symbol.toLowerCase().includes(search.toLowerCase()) ||
-        i.name.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [balancesByTab, activeTab, search]);
-
   const openModal = (type, asset) => {
     setModalType(type);
     setSelectedAsset(asset);
@@ -259,7 +236,7 @@ export default function WalletScreen() {
         text1: `${modalType.charAt(0).toUpperCase() + modalType.slice(1)} Successful`,
       });
       closeModal();
-      onRefresh();
+      await refreshBalances();
     } catch (err) {
       Toast.show({
         type: 'error',

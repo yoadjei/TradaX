@@ -1,8 +1,9 @@
 package com.tradax.auth.service;
 
-import com.tradax.auth.model.User;
-import com.tradax.auth.repository.UserRepository;
-import com.tradax.auth.util.JwtUtil;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.Random;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,9 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.Random;
+import com.tradax.auth.model.User;
+import com.tradax.auth.repository.UserRepository;
+import com.tradax.auth.util.JwtUtil;
 
 @Service
 @Transactional
@@ -156,10 +157,23 @@ public class AuthService {
         if (userOpt.isEmpty()) throw new RuntimeException("User not found");
 
         User user = userOpt.get();
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
-        user.setUpdatedAt(LocalDateTime.now());
-        return userRepository.save(user);
+        boolean changed = false;
+
+        if (firstName != null && !firstName.isBlank() && !firstName.equals(user.getFirstName())) {
+            user.setFirstName(firstName.trim());
+            changed = true;
+        }
+        if (lastName != null && !lastName.isBlank() && !lastName.equals(user.getLastName())) {
+            user.setLastName(lastName.trim());
+            changed = true;
+        }
+
+        if (changed) {
+            user.setUpdatedAt(LocalDateTime.now());
+            user = userRepository.save(user);
+        }
+
+        return user;
     }
 
     private void sendEmail(String to, String subject, String text) {
