@@ -48,6 +48,18 @@ COINGECKO_API_KEY=optional
 - 🌓 Dark/light theme toggle
 - 🧩 Modular monorepo architecture
 
+---
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="assets/tradings.jpg" alt="Trading Screen" width="250" />
+  <img src="assets/coins.jpg" alt="Coins Screen" width="250" />
+  <img src="assets/wallet.jpg" alt="Wallet Screen" width="250" />
+</p>
+
+---
+
 ## 🗂️ Project Structure
 
 ```
