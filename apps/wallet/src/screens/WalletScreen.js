@@ -17,12 +17,37 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { Typography, Card, Button, Input } from '@tradax/ui';
 import { useTheme } from '@tradax/theme';
-import { walletApi, formatPrice, cryptoApi } from '@tradax/utils';
+import { walletApi, cryptoApi } from '@tradax/utils';
+import Svg, { G, Path, Circle, Text as SvgText, Defs, TextPath } from 'react-native-svg';
 
-function CoinImage({ uri, style, placeholderColor }) {
+const CHART_SIZE = 240;
+const CHART_STROKE = 30;
+const EXCLUDE_FROM_CRYPTO = new Set(['USD']); // ignore USD completely
+
+function formatUSDNum(n) {
+  const num = Number(n || 0);
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function CoinImage({ uri, style, placeholderColor, symbol }) {
   const [error, setError] = useState(false);
-  if (!uri || error) {
-    return <View style={[style, { backgroundColor: placeholderColor }]} />;
+  if (!uri || error || symbol === 'USD') {
+    return (
+      <View
+        style={[
+          style,
+          {
+            backgroundColor: placeholderColor,
+            justifyContent: 'center',
+            alignItems: 'center',
+          },
+        ]}
+      >
+        <Typography variant="caption" style={{ fontWeight: '700' }}>
+          {symbol?.[0] ?? '•'}
+        </Typography>
+      </View>
+    );
   }
   return (
     <Image
@@ -34,6 +59,159 @@ function CoinImage({ uri, style, placeholderColor }) {
   );
 }
 
+/**
+ * Donut with:
+ * - straight edges (no round caps)
+ * - curved labels INSIDE each slice using TextPath
+ * - minimum sweep so tiny assets are still visible
+ */
+function DonutChart({
+  data,
+  size = CHART_SIZE,
+  strokeWidth = CHART_STROKE,
+  trackColor,
+  colors = [],
+  gapDeg = 6,
+  minShowPct = 0.2,
+  minSweepDeg = 3,
+  hideBalances = false,
+  labelLight = '#000',
+  labelDark = '#fff',
+  isDark,
+}) {
+  const radius = size / 2;
+  const r = radius - strokeWidth / 2;
+  const rInnerLabel = r - strokeWidth * 0.62;
+  const cx = radius;
+  const cy = radius;
+
+  const total = data.reduce((acc, d) => acc + (d.value || 0), 0) || 1;
+
+  const polarToCartesian = (centerX, centerY, rad, angleInDeg) => {
+    const angleInRad = ((angleInDeg - 90) * Math.PI) / 180.0;
+    return {
+      x: centerX + rad * Math.cos(angleInRad),
+      y: centerY + rad * Math.sin(angleInRad),
+    };
+  };
+
+  const arcPath = (rad, startAngle, endAngle) => {
+    const start = polarToCartesian(cx, cy, rad, endAngle);
+    const end = polarToCartesian(cx, cy, rad, startAngle);
+    const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+    return `M ${start.x} ${start.y} A ${rad} ${rad} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+  };
+
+  const n = data.length;
+  const available = 360 - gapDeg * n;
+
+  // compute sweeps with minSweepDeg
+  const rawSweeps = data.map(d => ((d.value || 0) / total) * available);
+  const withMin = rawSweeps.map(s => Math.max(s, minSweepDeg));
+  const sumWithMin = withMin.reduce((a, b) => a + b, 0);
+  const scale = sumWithMin > 0 ? available / sumWithMin : 1;
+  const sweeps = withMin.map(s => s * scale);
+
+  // build slices
+  let cursor = 0;
+  const slices = data.map((d, i) => {
+    const sweep = sweeps[i];
+    const value = d.value || 0;
+    const percent = (value / total) * 100;
+    const startAngle = cursor;
+    const endAngle = cursor + sweep;
+    cursor = endAngle + gapDeg;
+
+    const mid = (startAngle + endAngle) / 2;
+
+    const id = `inner-arc-${i}`;
+    const labelText = hideBalances ? '' : `${d.key} ${percent.toFixed(1)}%`;
+    const visible = percent >= minShowPct;
+
+    return {
+      key: d.key || String(i),
+      color: d.color || colors[i % colors.length],
+      strokePath: arcPath(r, startAngle, endAngle),
+      labelPath: arcPath(rInnerLabel, startAngle, endAngle),
+      mid,
+      id,
+      labelText,
+      visible,
+    };
+  });
+
+  return (
+    <Svg width={size} height={size}>
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        stroke={trackColor}
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeLinecap="butt"
+      />
+      <G>
+        {slices.map((s, idx) => (
+          <Path
+            key={`arc-${s.key}-${idx}`}
+            d={s.strokePath}
+            stroke={s.color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            fill="none"
+          />
+        ))}
+      </G>
+
+      <Defs>
+        {slices.map((s, idx) => (
+          <Path key={`def-${s.id}`} id={s.id} d={s.labelPath} fill="none" />
+        ))}
+      </Defs>
+
+      <G>
+        {slices.map((s, idx) =>
+          s.visible && s.labelText ? (
+            <SvgText
+              key={`txt-${s.key}-${idx}`}
+              fontSize={8}
+              fontWeight="600"
+              fill={isDark ? labelDark : labelLight}
+            >
+              <TextPath href={`#${s.id}`} startOffset="50%" textAnchor="middle">
+                {s.labelText}
+              </TextPath>
+            </SvgText>
+          ) : null
+        )}
+      </G>
+    </Svg>
+  );
+}
+
+const DEFAULT_ASSETS = [
+  { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png' },
+  { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', image: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png' },
+  { id: 'tether', name: 'Tether', symbol: 'USDT', image: 'https://assets.coingecko.com/coins/images/325/large/Tether-logo.png' },
+  { id: 'usd-coin', name: 'USD Coin', symbol: 'USDC', image: 'https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png' },
+  { id: 'binancecoin', name: 'BNB', symbol: 'BNB', image: 'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png' },
+  { id: 'ripple', name: 'XRP', symbol: 'XRP', image: 'https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png' },
+  { id: 'solana', name: 'Solana', symbol: 'SOL', image: 'https://assets.coingecko.com/coins/images/4128/large/solana.png' },
+  { id: 'cardano', name: 'Cardano', symbol: 'ADA', image: 'https://assets.coingecko.com/coins/images/975/large/cardano.png' },
+  { id: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', image: 'https://assets.coingecko.com/coins/images/5/large/dogecoin.png' },
+  { id: 'tron', name: 'TRON', symbol: 'TRX', image: 'https://assets.coingecko.com/coins/images/1094/large/tron-logo.png' },
+  { id: 'polkadot', name: 'Polkadot', symbol: 'DOT', image: 'https://assets.coingecko.com/coins/images/12171/large/polkadot.png' },
+  { id: 'matic-network', name: 'Polygon', symbol: 'MATIC', image: 'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png' },
+  { id: 'shiba-inu', name: 'Shiba Inu', symbol: 'SHIB', image: 'https://assets.coingecko.com/coins/images/11939/large/shiba.png' },
+  { id: 'litecoin', name: 'Litecoin', symbol: 'LTC', image: 'https://assets.coingecko.com/coins/images/2/large/litecoin.png' },
+  { id: 'avalanche-2', name: 'Avalanche', symbol: 'AVAX', image: 'https://assets.coingecko.com/coins/images/12559/large/coin-round-red.png' },
+  { id: 'uniswap', name: 'Uniswap', symbol: 'UNI', image: 'https://assets.coingecko.com/coins/images/12504/large/uniswap-uni.png' },
+  { id: 'chainlink', name: 'Chainlink', symbol: 'LINK', image: 'https://assets.coingecko.com/coins/images/877/large/chainlink-new-logo.png' },
+  { id: 'stellar', name: 'Stellar', symbol: 'XLM', image: 'https://assets.coingecko.com/coins/images/100/large/Stellar_symbol_black_RGB.png' },
+  { id: 'monero', name: 'Monero', symbol: 'XMR', image: 'https://assets.coingecko.com/coins/images/69/large/monero_logo.png' },
+];
+
 export default function WalletScreen() {
   const { theme } = useTheme();
 
@@ -43,33 +221,21 @@ export default function WalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [hideBalances, setHideBalances] = useState(false);
-  const [activeTab, setActiveTab] = useState('spot');
 
   const [search, setSearch] = useState('');
-  const [showSearchBar, setShowSearchBar] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
 
   const [sortKey, setSortKey] = useState('usd');
   const [sortDir, setSortDir] = useState('desc');
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [tradeModalVisible, setTradeModalVisible] = useState(false);
+  const [assetPickerVisible, setAssetPickerVisible] = useState(false);
   const [modalType, setModalType] = useState('deposit');
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [amount, setAmount] = useState('');
   const [feeRate] = useState(0.001);
 
-  const [availableAssets] = useState([
-    { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png' },
-    { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', image: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png' },
-    { id: 'tether', name: 'Tether', symbol: 'USDT', image: 'https://assets.coingecko.com/coins/images/325/large/Tether-logo.png' },
-    { id: 'ripple', name: 'XRP', symbol: 'XRP', image: 'https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png' },
-    { id: 'binancecoin', name: 'BNB', symbol: 'BNB', image: 'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png' },
-    { id: 'solana', name: 'Solana', symbol: 'SOL', image: 'https://assets.coingecko.com/coins/images/4128/large/solana.png' },
-    { id: 'usd-coin', name: 'USD Coin', symbol: 'USDC', image: 'https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png' },
-    { id: 'tron', name: 'TRX', symbol: 'TRX', image: 'https://assets.coingecko.com/coins/images/1094/large/tron-logo.png' },
-    { id: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', image: 'https://assets.coingecko.com/coins/images/5/large/dogecoin.png' },
-    { id: 'staked-ether', name: 'Staked ETH', symbol: 'STETH', image: 'https://assets.coingecko.com/coins/images/13442/large/steth_logo.png' },
-  ]);
+  const [assetsCatalog, setAssetsCatalog] = useState(DEFAULT_ASSETS);
 
   useEffect(() => {
     refreshBalances();
@@ -79,7 +245,17 @@ export default function WalletScreen() {
     setLoading(true);
     try {
       const res = await walletApi.getBalances();
-      setServerBalances(Array.isArray(res?.balances) ? res.balances : []);
+      const list = Array.isArray(res?.balances) ? res.balances : [];
+      setServerBalances(list);
+
+      const newOnes = list
+        .map(b => (b.symbol || b.asset || '').toUpperCase())
+        .filter(Boolean)
+        .filter(sym => !assetsCatalog.some(a => a.symbol.toUpperCase() === sym))
+        .map(sym => ({ id: sym.toLowerCase(), name: sym, symbol: sym, image: null }));
+      if (newOnes.length) {
+        setAssetsCatalog(prev => [...prev, ...newOnes]);
+      }
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Error', text2: e?.message ?? 'Failed to fetch data' });
     } finally {
@@ -133,54 +309,79 @@ export default function WalletScreen() {
     return map;
   }, [serverBalances]);
 
+  const MAX_COINS = 50;
+
   const baseBalances = useMemo(() => {
-    return availableAssets.map(a => {
+    const merged = [];
+    const catalog = assetsCatalog.slice(0, MAX_COINS);
+
+    catalog.forEach(a => {
       const sym = a.symbol.toUpperCase();
+      if (EXCLUDE_FROM_CRYPTO.has(sym)) return;
+
       const srv = bySymbol[sym] || {};
       const livePrice = Number(priceMap[sym]?.price ?? srv.price ?? 0);
       const balance = Number(srv.balance ?? 0);
       const usd = balance * livePrice;
-      return {
+      merged.push({
+        id: a.id || sym.toLowerCase(),
         symbol: sym,
         name: a.name,
         image: a.image,
         balance,
         price: livePrice,
         usd,
-      };
+      });
     });
-  }, [availableAssets, bySymbol, priceMap]);
 
-  const totalValue = useMemo(
-    () => baseBalances.reduce((acc, b) => acc + b.usd, 0),
+    Object.keys(bySymbol).forEach(sym => {
+      const up = sym.toUpperCase();
+      if (EXCLUDE_FROM_CRYPTO.has(up)) return;
+      if (!merged.some(x => x.symbol === up)) {
+        const srv = bySymbol[up];
+        const livePrice = Number(priceMap[up]?.price ?? srv.price ?? 0);
+        const balance = Number(srv.balance ?? 0);
+        const usd = balance * livePrice;
+        merged.push({
+          id: up.toLowerCase(),
+          symbol: up,
+          name: up,
+          image: null,
+          balance,
+          price: livePrice,
+          usd,
+        });
+      }
+    });
+
+    return merged;
+  }, [assetsCatalog, bySymbol, priceMap]);
+
+  const ownedBalances = useMemo(
+    () => baseBalances.filter(b => (b.usd || 0) > 0 || (b.balance || 0) > 0),
     [baseBalances]
   );
 
+  const totalValue = useMemo(
+    () => ownedBalances.reduce((acc, b) => acc + b.usd, 0),
+    [ownedBalances]
+  );
+
   const balancesWithPct = useMemo(() => {
-    return baseBalances.map(b => ({
+    return ownedBalances.map(b => ({
       ...b,
       percent: totalValue > 0 ? (b.usd / totalValue) * 100 : 0,
     }));
-  }, [baseBalances, totalValue]);
-
-  const balancesByTab = useMemo(() => {
-    return {
-      spot: balancesWithPct,
-      funding: balancesWithPct.filter((_, i) => i % 2 === 0),
-      earn: balancesWithPct.filter((_, i) => i % 2 !== 0),
-    };
-  }, [balancesWithPct]);
+  }, [ownedBalances, totalValue]);
 
   const balances = useMemo(() => {
-    const list = balancesByTab[activeTab] || [];
-    const filtered =
-      showSearchBar && search
-        ? list.filter(
-            i =>
-              i.symbol.toLowerCase().includes(search.toLowerCase()) ||
-              i.name.toLowerCase().includes(search.toLowerCase())
-          )
-        : list;
+    const filtered = search
+      ? balancesWithPct.filter(
+          i =>
+            i.symbol.toLowerCase().includes(search.toLowerCase()) ||
+            i.name.toLowerCase().includes(search.toLowerCase())
+        )
+      : balancesWithPct;
     const sorted = [...filtered].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
       if (sortKey === 'symbol') return a.symbol.localeCompare(b.symbol) * dir;
@@ -188,19 +389,20 @@ export default function WalletScreen() {
       return (a.usd - b.usd) * dir;
     });
     return sorted;
-  }, [balancesByTab, activeTab, showSearchBar, search, sortKey, sortDir]);
+  }, [balancesWithPct, search, sortKey, sortDir]);
 
-  const openModal = (type, asset) => {
+  const openPickerThenTrade = (type) => {
     setModalType(type);
-    setSelectedAsset(asset);
-    setAmount('');
-    setModalVisible(true);
-  };
-
-  const closeModal = () => {
-    setModalVisible(false);
     setSelectedAsset(null);
     setAmount('');
+    setAssetPickerVisible(true);
+  };
+
+  const openTradeModal = (asset) => {
+    setSelectedAsset(asset);
+    setAmount('');
+    setAssetPickerVisible(false);
+    setTradeModalVisible(true);
   };
 
   const handleAction = async () => {
@@ -217,13 +419,13 @@ export default function WalletScreen() {
         await walletApi.deposit({ asset: selectedAsset.symbol, amount: numericAmount });
       } else if (modalType === 'withdraw') {
         await walletApi.withdraw({ asset: selectedAsset.symbol, amount: numericAmount });
-      } else if (modalType === 'buy' || modalType === 'sell') {
+      } else if (modalType === 'buy' || modalType === 'sell' || modalType === 'convert') {
         const price = Number(selectedAsset.price ?? 0);
         const cost = price * numericAmount;
         const fee = cost * feeRate;
-        await walletApi.trade({
+        await walletApi.trade?.({
           asset: selectedAsset.symbol.toLowerCase(),
-          type: modalType === 'buy' ? 'buy' : 'sell',
+          type: modalType,
           orderType: 'market',
           amount: numericAmount,
           price,
@@ -235,7 +437,9 @@ export default function WalletScreen() {
         type: 'success',
         text1: `${modalType.charAt(0).toUpperCase() + modalType.slice(1)} Successful`,
       });
-      closeModal();
+      setTradeModalVisible(false);
+      setSelectedAsset(null);
+      setAmount('');
       await refreshBalances();
     } catch (err) {
       Toast.show({
@@ -246,90 +450,88 @@ export default function WalletScreen() {
     }
   };
 
-  const formatQty = n => {
-    const num = Number(n) || 0;
-    return num >= 1 ? num.toFixed(2) : num.toFixed(6);
-  };
-
   const mask = v => (hideBalances ? '•••••' : v);
 
-  const renderHeader = () => (
-    <View>
-      {/* === TOP (NO ACTION BUTTONS HERE) === */}
-      <Card style={[styles.topCard, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.topRow}>
-          <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>
-            Total Assets
-          </Typography>
-          <Pressable onPress={() => setHideBalances(!hideBalances)}>
-            <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>
-              {hideBalances ? '👁️‍🗨️' : '👁️'}
-            </Typography>
-          </Pressable>
-        </View>
+  const ringColors =
+    theme.colors?.chartColors ||
+    ['#5F6FFF', '#00C2FF', '#FFC542', '#FF5757', '#8E44AD', '#2ECC71', '#E84393', '#636E72', '#55EFC4', '#81ECEC'];
 
-        <Typography variant="h1" style={{ color: theme.colors.text, marginTop: 6 }}>
-          {mask(formatPrice(totalValue))}
-        </Typography>
+  const QuickAction = ({ label, icon, onPress }) => (
+    <Pressable style={[styles.quickActionCol]} onPress={onPress}>
+      <View style={[styles.quickActionCircle, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <Typography variant="body2" style={{ color: theme.colors.text }}>{icon}</Typography>
+      </View>
+      <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginTop: 4 }}>
+        {label}
+      </Typography>
+    </Pressable>
+  );
 
-        <View style={styles.pnlRow}>
-          <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>
-            24h PnL
-          </Typography>
-          <Typography variant="body2" style={{ color: theme.colors.success, marginLeft: 8 }}>
-            --
-          </Typography>
-        </View>
+  const renderHeader = () => {
+    const chartData = balancesWithPct.map((b, i) => ({
+      key: b.symbol,
+      value: b.usd,
+      color: ringColors[i % ringColors.length],
+      percent: b.percent,
+    }));
 
-        <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
-          <View style={[styles.progressFill, { backgroundColor: theme.colors.primary }]} />
-        </View>
-      </Card>
+    const assetsCount = balancesWithPct.length;
 
-      {/* === TABS === */}
-      <Card style={[styles.tabsCard, { backgroundColor: theme.colors.surface }]}>
-        <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
-          {['spot', 'funding', 'earn'].map(t => (
-            <Pressable
-              key={t}
-              style={[
-                styles.tabItem,
-                activeTab === t && { borderBottomColor: theme.colors.primary, borderBottomWidth: 2 },
-              ]}
-              onPress={() => setActiveTab(t)}
-            >
-              <Typography
-                variant="body1"
-                style={{
-                  color: activeTab === t ? theme.colors.primary : theme.colors.textSecondary,
-                }}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </Typography>
-            </Pressable>
-          ))}
+    return (
+      <View>
+        <Card style={[styles.topCard, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.ringWrap}>
+            <DonutChart
+              data={chartData}
+              size={CHART_SIZE}
+              strokeWidth={CHART_STROKE}
+              trackColor={theme.colors.border}
+              colors={ringColors}
+              gapDeg={6}
+              minShowPct={0.2}
+              minSweepDeg={3}
+              hideBalances={hideBalances}
+              labelLight="#000"
+              labelDark="#fff"
+              isDark={theme.dark}
+            />
+            <View style={[styles.ringCenter, { backgroundColor: 'transparent' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                <Typography variant="h2" style={{ color: theme.colors.text, textAlign: 'center' }}>
+                  {mask(formatUSDNum(totalValue))}
+                </Typography>
+                <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 4, marginBottom: 4 }}>
+                  USD
+                </Typography>
+              </View>
 
-          <Pressable
-            style={styles.searchIcon}
-            onPress={() => {
-              setShowSearchBar(true);
-              setSearchModalVisible(true);
-            }}
+              <View style={styles.assetsRowCenter}>
+                <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginRight: 8 }}>
+                  {assetsCount} assets
+                </Typography>
+                <Pressable onPress={() => setHideBalances(prev => !prev)} style={styles.hideBtn}>
+                  <Typography variant="caption" style={{ color: theme.colors.primary }}>
+                    {hideBalances ? 'SHOW' : 'HIDE'}
+                  </Typography>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.quickActionsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickRowScrollable}
           >
-            <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>🔍</Typography>
-          </Pressable>
+            <QuickAction label="Buy" icon="＋" onPress={() => openPickerThenTrade('buy')} />
+            <QuickAction label="Sell" icon="↘" onPress={() => openPickerThenTrade('sell')} />
+            <QuickAction label="Convert" icon="⇄" onPress={() => openPickerThenTrade('convert')} />
+            <QuickAction label="Deposit" icon="↓" onPress={() => openPickerThenTrade('deposit')} />
+            <QuickAction label="Withdraw" icon="↑" onPress={() => openPickerThenTrade('withdraw')} />
+          </ScrollView>
         </View>
-
-        {showSearchBar && (
-          <Input
-            placeholder="Search assets"
-            value={search}
-            onFocus={() => setSearchModalVisible(true)}
-            onChangeText={setSearch}
-            style={styles.searchInput}
-            returnKeyType="search"
-          />
-        )}
 
         <View style={styles.sortRow}>
           <Pressable
@@ -365,85 +567,66 @@ export default function WalletScreen() {
               Value {sortKey === 'usd' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
             </Typography>
           </Pressable>
+          <Pressable
+            style={styles.sortBtn}
+            onPress={() => setSearchModalVisible(true)}
+          >
+            <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>🔍</Typography>
+          </Pressable>
         </View>
-      </Card>
 
-      <Typography variant="h3" style={{ color: theme.colors.text, paddingHorizontal: 20, marginTop: 16 }}>
-        Your Assets
-      </Typography>
-    </View>
-  );
+        <View style={styles.yourCryptoHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+            <Typography variant="h3" style={{ color: theme.colors.text }}>Your crypto</Typography>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+            <Typography variant="h4" style={{ color: theme.colors.text, marginTop: 4 }}>
+              {mask(formatUSDNum(totalValue))}
+            </Typography>
+            <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 4, marginBottom: 2 }}>
+              USD
+            </Typography>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   const renderItem = ({ item }) => {
-    const canWithdraw = item.balance > 0;
-    const canSell = item.balance > 0;
-
     return (
       <Pressable onPress={() => {}} style={{ width: '100%' }}>
-        <Card style={[styles.assetCard, { backgroundColor: theme.colors.surface }]}>
-          <View style={styles.assetRow}>
-            <View style={styles.assetInfoRow}>
-              <CoinImage
-                uri={item.image}
-                style={styles.coinImage}
-                placeholderColor={theme.colors.border}
-              />
-              <View style={styles.assetText}>
-                <Typography variant="body2" style={{ color: theme.colors.text }}>
-                  {item.symbol}
-                </Typography>
-                <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>
-                  {item.name}
-                </Typography>
-              </View>
+        <View style={[styles.assetRowList, { backgroundColor: 'transparent' }]}>
+          <View style={styles.assetInfoRow}>
+            <CoinImage
+              uri={item.image}
+              style={styles.coinImage}
+              placeholderColor={theme.colors.border}
+              symbol={item.symbol}
+            />
+            <View style={styles.assetText}>
+              <Typography variant="body2" style={{ color: theme.colors.text }}>
+                {item.symbol}
+              </Typography>
+              <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>
+                {item.name}
+              </Typography>
             </View>
+          </View>
 
-            <View style={styles.assetValues}>
+          <View style={styles.assetValuesRight}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
               <Typography variant="body2" style={{ color: theme.colors.text, textAlign: 'right' }}>
-                {mask(formatQty(item.balance))}
+                {mask(formatUSDNum(item.usd))}
               </Typography>
-              <Typography variant="caption" style={{ color: theme.colors.textSecondary, textAlign: 'right' }}>
-                {mask(formatPrice(item.usd))}
+              <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>
+                USD
               </Typography>
             </View>
+            <Typography variant="caption" style={{ color: theme.colors.textSecondary, textAlign: 'right' }}>
+              {mask(item.balance >= 1 ? item.balance.toFixed(2) : item.balance.toFixed(6))}
+            </Typography>
           </View>
-
-          <View style={[styles.percentBar, { backgroundColor: theme.colors.border }]}>
-            <View style={[styles.percentFill, { width: `${item.percent?.toFixed?.(2) || 0}%`, backgroundColor: theme.colors.primary }]} />
-          </View>
-
-          <View style={styles.assetActionsRow}>
-            <Button
-              title="Deposit"
-              variant="outline"
-              onPress={() => openModal('deposit', item)}
-              style={styles.actionBtnCompact}
-              titleStyle={styles.compactBtnTextTiny}
-            />
-            <Button
-              title="Withdraw"
-              variant="outline"
-              disabled={!canWithdraw}
-              onPress={() => openModal('withdraw', item)}
-              style={styles.actionBtnCompact}
-              titleStyle={styles.compactBtnTextTiny}
-            />
-            <Button
-              title="Buy"
-              onPress={() => openModal('buy', item)}
-              style={styles.actionBtnCompact}
-              titleStyle={styles.compactBtnTextTiny}
-            />
-            <Button
-              title="Sell"
-              variant="outline"
-              disabled={!canSell}
-              onPress={() => openModal('sell', item)}
-              style={styles.actionBtnCompact}
-              titleStyle={styles.compactBtnTextTiny}
-            />
-          </View>
-        </Card>
+        </View>
       </Pressable>
     );
   };
@@ -470,7 +653,7 @@ export default function WalletScreen() {
         <FlatList
           ListHeaderComponent={renderHeader}
           data={balances}
-          keyExtractor={(item, idx) => item.symbol || String(idx)}
+          keyExtractor={(item, idx) => `${item.symbol}-${item.id || ''}-${idx}`}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -492,7 +675,7 @@ export default function WalletScreen() {
         />
       </KeyboardAvoidingView>
 
-      {/* SEARCH MODAL — Cancel button made prominent & accessible */}
+      {/* Search modal */}
       <Modal
         visible={searchModalVisible}
         animationType="slide"
@@ -518,7 +701,6 @@ export default function WalletScreen() {
               <Pressable
                 onPress={() => {
                   setSearchModalVisible(false);
-                  setShowSearchBar(false);
                   setSearch('');
                 }}
                 style={styles.cancelBtn}
@@ -535,34 +717,29 @@ export default function WalletScreen() {
               </View>
             ) : (
               <FlatList
-                data={filteredForSearchModal}
-                keyExtractor={(item, idx) => item.symbol || String(idx)}
+                data={balances}
+                keyExtractor={(item, idx) => `${item.symbol}-${item.id || ''}-${idx}`}
                 renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      setSearchModalVisible(false);
-                      setShowSearchBar(false);
-                      setSearch('');
-                    }}
-                  >
-                    <View style={[styles.searchRow, { borderBottomColor: theme.colors.border }]}>
-                      <View style={styles.assetInfoRow}>
-                        <CoinImage
-                          uri={item.image}
-                          style={styles.coinImage}
-                          placeholderColor={theme.colors.border}
-                        />
-                        <View>
-                          <Typography variant="body2" style={{ color: theme.colors.text }}>{item.symbol}</Typography>
-                          <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>{item.name}</Typography>
-                        </View>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Typography variant="body2" style={{ color: theme.colors.text }}>{formatQty(item.balance)}</Typography>
-                        <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>{formatPrice(item.usd)}</Typography>
+                  <View style={[styles.searchRow, { borderBottomColor: theme.colors.border }]}>
+                    <View style={styles.assetInfoRow}>
+                      <CoinImage
+                        uri={item.image}
+                        style={styles.coinImage}
+                        placeholderColor={theme.colors.border}
+                        symbol={item.symbol}
+                      />
+                      <View>
+                        <Typography variant="body2" style={{ color: theme.colors.text }}>{item.symbol}</Typography>
+                        <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>{item.name}</Typography>
                       </View>
                     </View>
-                  </Pressable>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                        <Typography variant="body2" style={{ color: theme.colors.text }}>{formatUSDNum(item.usd)}</Typography>
+                        <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>USD</Typography>
+                      </View>
+                    </View>
+                  </View>
                 )}
                 keyboardDismissMode="interactive"
                 keyboardShouldPersistTaps="handled"
@@ -572,7 +749,70 @@ export default function WalletScreen() {
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={closeModal}>
+      {/* Asset picker */}
+      <Modal
+        visible={assetPickerVisible}
+        animationType="slide"
+        onRequestClose={() => setAssetPickerVisible(false)}
+      >
+        <SafeAreaView style={[styles.searchModalContainer, { backgroundColor: theme.colors.background }]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1 }}
+          >
+            <View style={[styles.searchBarWrap, { borderBottomColor: theme.colors.border }]}>
+              <Typography variant="h3" style={{ color: theme.colors.text }}>
+                {modalType.charAt(0).toUpperCase() + modalType.slice(1)} — Select asset
+              </Typography>
+            </View>
+
+            <FlatList
+              data={balancesWithPct}
+              keyExtractor={(item, idx) => `${item.symbol}-${item.id || ''}-${idx}`}
+              renderItem={({ item }) => (
+                <Pressable onPress={() => openTradeModal(item)}>
+                  <View style={[styles.searchRow, { borderBottomColor: theme.colors.border }]}>
+                    <View style={styles.assetInfoRow}>
+                      <CoinImage
+                        uri={item.image}
+                        style={styles.coinImage}
+                        placeholderColor={theme.colors.border}
+                        symbol={item.symbol}
+                      />
+                      <View>
+                        <Typography variant="body2" style={{ color: theme.colors.text }}>{item.symbol}</Typography>
+                        <Typography variant="caption" style={{ color: theme.colors.textSecondary }}>{item.name}</Typography>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                        <Typography variant="body2" style={{ color: theme.colors.text }}>{formatUSDNum(item.usd)}</Typography>
+                        <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>USD</Typography>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              )}
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+            />
+
+            <View style={styles.cancelContainer}>
+              <Pressable
+                onPress={() => {
+                  setAssetPickerVisible(false);
+                }}
+                style={styles.cancelBtn}
+              >
+                <Typography variant="body1" style={{ color: theme.colors.primary }}>Cancel</Typography>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Trade modal */}
+      <Modal visible={tradeModalVisible} transparent animationType="slide" onRequestClose={() => setTradeModalVisible(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalBg}
@@ -586,9 +826,9 @@ export default function WalletScreen() {
                 {modalType.charAt(0).toUpperCase() + modalType.slice(1)} {selectedAsset?.symbol}
               </Typography>
 
-              {selectedAsset?.symbol !== 'USD' && (
+              {selectedAsset?.symbol && (
                 <Typography variant="body2" style={{ color: theme.colors.textSecondary, marginVertical: 8, textAlign: 'center' }}>
-                  Balance: {selectedAsset ? formatQty(selectedAsset.balance) : '--'} {selectedAsset?.symbol}
+                  Balance: {selectedAsset?.balance >= 1 ? selectedAsset.balance.toFixed(2) : selectedAsset?.balance?.toFixed(6)} {selectedAsset.symbol}
                 </Typography>
               )}
 
@@ -600,31 +840,46 @@ export default function WalletScreen() {
                 style={styles.modalInput}
               />
 
-              {(modalType === 'buy' || modalType === 'sell') && Number(amount) > 0 && (
+              {(modalType === 'buy' || modalType === 'sell' || modalType === 'convert') && Number(amount) > 0 && (
                 <View style={styles.tradeSummary}>
                   <View style={styles.summaryRow}>
                     <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>Price</Typography>
-                    <Typography variant="body2" style={{ color: theme.colors.text }}>
-                      {formatPrice(selectedAsset?.price ?? 0)}
-                    </Typography>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <Typography variant="body2" style={{ color: theme.colors.text }}>
+                        {formatUSDNum(selectedAsset?.price ?? 0)}
+                      </Typography>
+                      <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>
+                        USD
+                      </Typography>
+                    </View>
                   </View>
                   <View style={styles.summaryRow}>
                     <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>Cost</Typography>
-                    <Typography variant="body2" style={{ color: theme.colors.text }}>
-                      {formatPrice((selectedAsset?.price ?? 0) * Number(amount || 0))}
-                    </Typography>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <Typography variant="body2" style={{ color: theme.colors.text }}>
+                        {formatUSDNum((selectedAsset?.price ?? 0) * Number(amount || 0))}
+                      </Typography>
+                      <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>
+                        USD
+                      </Typography>
+                    </View>
                   </View>
                   <View style={styles.summaryRow}>
                     <Typography variant="body2" style={{ color: theme.colors.textSecondary }}>Fee ({(feeRate * 100).toFixed(2)}%)</Typography>
-                    <Typography variant="body2" style={{ color: theme.colors.text }}>
-                      {formatPrice(((selectedAsset?.price ?? 0) * Number(amount || 0)) * feeRate)}
-                    </Typography>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                      <Typography variant="body2" style={{ color: theme.colors.text }}>
+                        {formatUSDNum(((selectedAsset?.price ?? 0) * Number(amount || 0)) * feeRate)}
+                      </Typography>
+                      <Typography variant="caption" style={{ color: theme.colors.textSecondary, marginLeft: 2, marginBottom: 1 }}>
+                        USD
+                      </Typography>
+                    </View>
                   </View>
                 </View>
               )}
 
               <View style={styles.modalActions}>
-                <Button title="Cancel" variant="outline" onPress={closeModal} style={styles.modalBtn} titleStyle={styles.compactBtnTextTiny} />
+                <Button title="Cancel" variant="outline" onPress={() => setTradeModalVisible(false)} style={styles.modalBtn} titleStyle={styles.compactBtnTextTiny} />
                 <Button
                   title={modalType.charAt(0).toUpperCase() + modalType.slice(1)}
                   onPress={handleAction}
@@ -643,47 +898,88 @@ export default function WalletScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { paddingBottom: 24 },
-  topCard: { marginHorizontal: 20, marginTop: 20, padding: 24, borderRadius: 16 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pnlRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  progressTrack: { width: '100%', height: 6, borderRadius: 3, marginTop: 14, overflow: 'hidden' },
-  progressFill: { width: '65%', height: '100%' },
-  tabsCard: { marginHorizontal: 20, marginTop: 16, padding: 12, borderRadius: 16 },
-  tabs: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 8 },
-  searchIcon: { paddingHorizontal: 8, paddingVertical: 4 },
-  searchInput: { marginTop: 6 },
-  sortRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  sortBtn: { paddingVertical: 6, paddingHorizontal: 8 },
-  assetCard: { marginHorizontal: 20, marginTop: 14, padding: 16, borderRadius: 16 },
-  assetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  assetInfoRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  coinImage: { width: 28, height: 28, borderRadius: 14, marginRight: 10 },
-  assetText: { flexShrink: 1 },
-  assetValues: { width: 120 },
-  percentBar: { width: '100%', height: 4, borderRadius: 2, marginTop: 8, overflow: 'hidden' },
-  percentFill: { height: '100%' },
-  assetActionsRow: {
+
+  topCard: { marginHorizontal: 20, marginTop: 20, paddingVertical: 16, paddingHorizontal: 12, borderRadius: 16 },
+
+  ringWrap: { alignSelf: 'center', width: CHART_SIZE, height: CHART_SIZE, marginBottom: 12 },
+  ringCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: CHART_SIZE,
+    height: CHART_SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  assetsRowCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  hideBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+
+  quickActionsWrapper: {
+    marginTop: 8,
+    marginHorizontal: 20,
+  },
+  quickRowScrollable: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  quickActionCol: {
+    alignItems: 'center',
+    width: 70,
+    marginHorizontal: 6,
+  },
+  quickActionCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  sortRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 12,
-    flexWrap: 'wrap',
+    paddingHorizontal: 20,
   },
-  actionBtnCompact: {
-    flexBasis: '48%',
-    marginVertical: 4,
-    minHeight: 30,
-    paddingVertical: 2,
+  sortBtn: { paddingVertical: 6, paddingHorizontal: 8 },
+
+  yourCryptoHeader: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
-  compactBtnTextTiny: {
-    fontSize: 10,
+
+  assetRowList: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  assetInfoRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  coinImage: { width: 30, height: 30, borderRadius: 15, marginRight: 10 },
+  assetText: { flexShrink: 1 },
+  assetValuesRight: { alignItems: 'flex-end', minWidth: 120 },
+
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   modalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16 },
   modal: { borderRadius: 16, padding: 20 },
   modalInput: { width: '100%', marginVertical: 16 },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   modalBtn: { flex: 0.48 },
+  compactBtnTextTiny: { fontSize: 12 },
   tradeSummary: { marginTop: 8, marginBottom: 8 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 2 },
 
