@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const RAPIDAPI_KEY = '2637cfa6famshdf32eaafc990988p18cb96jsn78addc0c9c0c';
+const RAPIDAPI_KEY = 'key';
 const RAPIDAPI_HOST = 'chatgpt-42.p.rapidapi.com';
 
 export const chatApi = {
