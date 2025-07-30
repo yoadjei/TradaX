@@ -2,6 +2,7 @@ package com.tradax.auth.config;
 
 import com.tradax.auth.filter.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -21,6 +22,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -28,6 +30,10 @@ public class SecurityConfig {
 
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    // Load allowed origins from environment or properties file
+    @Value("${ALLOWED_ORIGINS:*}")
+    private String allowedOrigins;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -58,7 +64,7 @@ public class SecurityConfig {
                         "/auth/reset-password"
                 ).permitAll()
                 .antMatchers(HttpMethod.PUT, "/auth/**").authenticated()
-                .antMatchers("/h2-console/**").permitAll()
+                .antMatchers("/h2-console/**").permitAll() // ⚠️ Only for dev — disable in production
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
@@ -68,6 +74,7 @@ public class SecurityConfig {
                 .logoutSuccessHandler((request, response, authentication) -> SecurityContextHolder.clearContext())
             );
 
+        // ⚠️ Frame options needed for H2 — disable only in dev
         http.headers().frameOptions().disable();
 
         return http.build();
@@ -76,7 +83,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        List<String> origins = Arrays.asList(allowedOrigins.split(","));
+
+        configuration.setAllowedOriginPatterns(origins); // e.g., https://yourfrontend.com
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
@@ -95,7 +104,8 @@ public class SecurityConfig {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return;
             }
-            // Optionally blacklist the token here.
+            final String token = authHeader.substring(7);
+            // TODO: Optionally blacklist or invalidate the token here
         };
     }
 }
