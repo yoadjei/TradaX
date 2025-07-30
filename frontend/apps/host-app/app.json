@@ -54,11 +54,11 @@
       ]
     ],
     "extra": {
-       "authServiceUrl": "http://10.1.0.128:8083",
-  "walletServiceUrl": "http://10.1.0.128:8082",
-      "rapidApiChatKey": "2637cfa6famshdf32eaafc990988p18cb96jsn78addc0c9c0c",
-      "coingeckoApiKey": "CG-vcmG4LCUUDVFNxdZeTt4Nbb4",
-      "gnewsApiKey": "b94bb9dbcc8ca93ac8b953ad25f75595",
+       "authServiceUrl": "http://x.x.x.x:8083",
+  "walletServiceUrl": "http://x.x.x.x:8082",
+      "rapidApiChatKey": "key",
+      "coingeckoApiKey": "key",
+      "gnewsApiKey": "key",
       "eas": {
         "projectId": "your-project-id-here"
       }
