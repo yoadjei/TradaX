@@ -2,8 +2,11 @@ package com.tradax.wallet.config;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
+import com.tradax.wallet.filter.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,14 +19,15 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import com.tradax.wallet.filter.JwtAuthenticationFilter;
-
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Value("${ALLOWED_ORIGINS:*}")
+    private String allowedOrigins;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -34,11 +38,11 @@ public class SecurityConfig {
             .authorizeRequests()
                 .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .antMatchers("/wallet/health").permitAll()
-                .antMatchers("/h2-console/**").permitAll()
+                .antMatchers("/h2-console/**").permitAll() // ⚠️ For development only
                 .anyRequest().authenticated()
             .and()
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .headers().frameOptions().disable();
+            .headers().frameOptions().disable(); // Needed for H2, disable in production
 
         return http.build();
     }
@@ -46,7 +50,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(Collections.singletonList("*"));
+
+        List<String> origins = Arrays.asList(allowedOrigins.split(","));
+        cfg.setAllowedOriginPatterns(origins); // e.g., https://yourfrontend.com
+
         cfg.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(Collections.singletonList("*"));
         cfg.setAllowCredentials(true);
