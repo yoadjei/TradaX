@@ -1,8 +1,7 @@
 import { externalApi } from './api';
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
-const COINGECKO_API_KEY = 'CG-vcmG4LCUUDVFNxdZeTt4Nbb4';
-
+const COINGECKO_API_KEY = 'key'
 class RateLimit {
   constructor(requestsPerMinute = 30) {
     this.requests = [];
