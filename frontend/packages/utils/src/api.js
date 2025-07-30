@@ -2,9 +2,9 @@ import Constants from 'expo-constants';
 import { getToken } from './storage';
 
 const AUTH_SERVICE_URL =
-  Constants.expoConfig?.extra?.authServiceUrl ?? 'http://10.1.0.128:8083';
+  Constants.expoConfig?.extra?.authServiceUrl ?? 'http://x.x.x.x:8083';
 const WALLET_SERVICE_URL =
-  Constants.expoConfig?.extra?.walletServiceUrl ?? 'http://10.1.0.128:8082';
+  Constants.expoConfig?.extra?.walletServiceUrl ?? 'http://x.x.x.x:8082';
 
 class ApiClient {
   constructor(baseURL) {
