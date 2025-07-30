@@ -1,7 +1,7 @@
 import { externalApi } from './api';
 
 const GNEWS_BASE_URL = 'https://gnews.io/api/v4';
-const GNEWS_API_KEY = 'b94bb9dbcc8ca93ac8b953ad25f75595';
+const GNEWS_API_KEY = 'key';
 
 // GNews: 10 max articles per request
 const GNEWS_HARD_MAX = 10;
